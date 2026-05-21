@@ -23,15 +23,19 @@ function strip_ansi(s) {
     print "Open this URL: https://auth.openai.com/codex/device"
     fflush()
   }
-  if (want_code && match(clean, /[A-Z0-9-]+/)) {
-    code = substr(clean, RSTART, RLENGTH)
-    want_code = 0
-    print "Enter this code: " code
-    print ""
-    fflush()
-  }
   if (clean ~ /2\. Enter this code:/) {
     want_code = 1
+    next
+  }
+  if (want_code) {
+    want_code = 0
+    if (match(clean, /^[[:space:]]*([A-Z0-9]+-)*[A-Z0-9]+[[:space:]]*$/)) {
+      code = clean
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", code)
+      print "Enter this code: " code
+      print ""
+      fflush()
+    }
   }
   if (clean ~ /Added openai-codex OAuth credential #[0-9]+/) {
     success = 1

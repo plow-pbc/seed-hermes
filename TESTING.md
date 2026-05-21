@@ -130,6 +130,65 @@ INFO gateway.run: Gateway running with 1 platform(s)
 
 The subsequent WebSocket connection warnings were expected because the smoke run used a dummy local base URL rather than a real Plow chat.
 
+### Testing-only local gateway source
+
+For end-to-end tests against the active local gateway working copy, use `PLOW_CHAT_PLUGIN_LOCAL_DIR`. This is strictly for maintainer testing; real users should leave it unset so the script fetches the pinned public GitHub raw files.
+
+From `hermes-agent/`:
+
+```sh
+PLOW_CHAT_PLUGIN_LOCAL_DIR=/Users/plucas/cncorp/hermes-demo/seed-hermes-plow-chat ./scripts/install-plow-chat-platform.sh
+find data/plugins/plow-chat-platform -type f | sort
+```
+
+Expected copied file set:
+
+```text
+data/plugins/plow-chat-platform/__init__.py
+data/plugins/plow-chat-platform/plugin.yaml
+data/plugins/plow-chat-platform/ref/hermes-plugin/plow_chat/__init__.py
+data/plugins/plow-chat-platform/ref/hermes-plugin/plow_chat/adapter.py
+data/plugins/plow-chat-platform/ref/hermes-plugin/plow_chat/plugin.yaml
+```
+
+The local override preserves the same runtime proof: with valid or dummy `PLOW_CHAT_*` values in ignored `data/.env`, `docker compose up` must load `plow_chat` with no `ImportError`.
+
+## Testing-only ChatGPT token cache
+
+Use this only for rapid maintainer test loops after one real browser-approved OAuth. Never commit `.test-cache/` or `data/auth.json`.
+
+After successful OAuth, save the whole latest auth file:
+
+```sh
+cd hermes-agent
+./scripts/cache-auth-json.sh save
+```
+
+Before a clean-slate test that wiped `./data`, restore it:
+
+```sh
+cd hermes-agent
+./scripts/prepare.sh
+./scripts/cache-auth-json.sh restore
+```
+
+After any run, save again because Hermes may refresh or rotate tokens:
+
+```sh
+cd hermes-agent
+./scripts/cache-auth-json.sh save
+```
+
+Equivalent manual commands from the repo root:
+
+```sh
+mkdir -p .test-cache/hermes
+cp hermes-agent/data/auth.json .test-cache/hermes/auth.json
+chmod 600 .test-cache/hermes/auth.json
+cp .test-cache/hermes/auth.json hermes-agent/data/auth.json
+chmod 600 hermes-agent/data/auth.json
+```
+
 ## Secret hygiene
 
 Covered by `hermes-agent/scripts/verify.sh`:
