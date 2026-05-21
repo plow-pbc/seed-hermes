@@ -29,13 +29,6 @@ if grep -q 'base_url:' data/config.yaml; then
   fail "data/config.yaml must not set model.base_url for openai-codex"
 fi
 
-if [ -d data/plugins/plow-chat-platform ]; then
-  test -f data/plugins/plow-chat-platform/plugin.yaml || fail "Plow plugin plugin.yaml missing"
-  test -f data/plugins/plow-chat-platform/__init__.py || fail "Plow plugin __init__.py missing"
-  test -f data/plugins/plow-chat-platform/ref/hermes-plugin/plow_chat/adapter.py || fail "Plow adapter missing"
-  grep -q 'plow-chat-platform' data/config.yaml || fail "Plow plugin fetched but not enabled"
-fi
-
 cd ..
 git check-ignore -q hermes-agent/.env || fail "hermes-agent/.env is not git-ignored"
 git check-ignore -q hermes-agent/data/.env || fail "hermes-agent/data/.env is not git-ignored"
@@ -43,7 +36,7 @@ git check-ignore -q hermes-agent/data/auth.json || fail "hermes-agent/data/auth.
 if git ls-files | grep -Eq '(^|/)auth\.json$|(^|/)data/\.env$|(^|/)hermes-agent/\.env$'; then
   fail "runtime secret files are tracked"
 fi
-if git grep -nE 'g[h]p_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|PLOW_CHAT_SECRET_KEY=.+|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' >/tmp/seed-hermes-secret-grep.$$ 2>/dev/null; then
+if git grep -nE 'g[h]p_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' >/tmp/seed-hermes-secret-grep.$$ 2>/dev/null; then
   cat /tmp/seed-hermes-secret-grep.$$
   rm -f /tmp/seed-hermes-secret-grep.$$
   fail "tracked files contain secret-looking literal values"

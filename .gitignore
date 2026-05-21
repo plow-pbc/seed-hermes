@@ -16,8 +16,5 @@ hermes-agent/data/workspace/*
 hermes-agent/data/plugins/*
 !hermes-agent/data/plugins/.gitkeep
 
-# Optional gateway code is fetched during the seed run.
-hermes-agent/data/plugins/plow-chat-platform/
-
 # Local smoke-test artifacts.
 hermes-agent/data/workspace/hermes-write-smoke.txt
