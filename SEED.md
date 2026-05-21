@@ -16,7 +16,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Optional platform gateway
 
-- `https://github.com/plow-pbc/seed-hermes-plow-chat.git` is an OPTIONAL dependency. It is followed only when the user chooses to add a platform gateway during this seed's run.
+- `https://github.com/plow-pbc/seed-hermes-plow-chat.git` is an OPTIONAL dependency: an iMessage/RCS platform gateway, built on the Plow Chat API, that lets the user chat with Hermes from their phone.
 
 ## Objects
 
@@ -71,7 +71,7 @@ The agent prepares the Docker-only Hermes workspace without requiring host-local
 
 The agent asks the user whether they want a platform gateway. ^act-platform-choice
 
-1. Ask: "Want a platform gateway? I can follow the optional gateway seed."
+1. Ask: "Want a platform gateway? I can follow the optional iMessage/RCS gateway seed so you can chat with Hermes from your phone."
 2. If the user declines, leave `plugins.enabled` unchanged and continue with gateway-less Hermes.
 3. If the user chooses a platform gateway, follow the optional dependency seed from `## Dependencies`.
 4. After the gateway seed completes, confirm any installed plugin exists under `data/plugins/<name>/` and that `data/config.yaml` enables the plugin manifest name.
