@@ -5,8 +5,14 @@ cd -- "$(dirname "$0")/.."
 
 mkdir -p data/workspace data/plugins
 
+checkout_id="$(printf '%s' "$(pwd -P)" | cksum | awk '{print $1}')"
+default_project="seed-hermes-${checkout_id}"
+default_container="${default_project}-hermes"
+
 if [ ! -f .env ]; then
   {
+    printf 'COMPOSE_PROJECT_NAME=%s\n' "$default_project"
+    printf 'HERMES_CONTAINER_NAME=%s\n' "$default_container"
     printf 'HERMES_UID=%s\n' "$(id -u)"
     printf 'HERMES_GID=%s\n' "$(id -g)"
     printf 'HERMES_API_PORT=%s\n' "${HERMES_API_PORT:-8642}"
@@ -14,11 +20,10 @@ if [ ! -f .env ]; then
   } > .env
   chmod 600 .env
 else
-  for key in HERMES_UID HERMES_GID; do
-    if ! grep -q "^${key}=" .env; then
-      printf '%s=%s\n' "$key" "$( [ "$key" = HERMES_UID ] && id -u || id -g )" >> .env
-    fi
-  done
+  grep -q '^COMPOSE_PROJECT_NAME=' .env || printf 'COMPOSE_PROJECT_NAME=%s\n' "$default_project" >> .env
+  grep -q '^HERMES_CONTAINER_NAME=' .env || printf 'HERMES_CONTAINER_NAME=%s\n' "$default_container" >> .env
+  grep -q '^HERMES_UID=' .env || printf 'HERMES_UID=%s\n' "$(id -u)" >> .env
+  grep -q '^HERMES_GID=' .env || printf 'HERMES_GID=%s\n' "$(id -g)" >> .env
 fi
 
 if [ ! -f data/.env ]; then

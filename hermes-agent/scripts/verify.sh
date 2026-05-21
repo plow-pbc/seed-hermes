@@ -13,7 +13,10 @@ test -f data/config.yaml || fail "data/config.yaml missing"
 test -d data/workspace || fail "data/workspace missing"
 test -d data/plugins || fail "data/plugins missing"
 
-grep -q 'container_name: ${HERMES_CONTAINER_NAME:-hermes}' compose.yaml || fail "service/container name is not pinned to hermes"
+grep -q 'container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}' compose.yaml || fail "container name must come from prepare.sh"
+grep -q 'COMPOSE_PROJECT_NAME=' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout compose project"
+grep -q 'HERMES_CONTAINER_NAME=' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout container name"
+grep -q 'working_dir: /opt/data/workspace' compose.yaml || fail "container working_dir is not /opt/data/workspace"
 grep -q './data:/opt/data' compose.yaml || fail "whole data volume is not mounted"
 grep -q 'HERMES_UID:' compose.yaml || fail "HERMES_UID missing"
 grep -q 'HERMES_GID:' compose.yaml || fail "HERMES_GID missing"
@@ -39,7 +42,7 @@ git check-ignore -q hermes-agent/data/auth.json || fail "hermes-agent/data/auth.
 if git ls-files | grep -Eq '(^|/)auth\.json$|(^|/)data/\.env$|(^|/)hermes-agent/\.env$'; then
   fail "runtime secret files are tracked"
 fi
-if git grep -nE 'ghp_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|PLOW_CHAT_SECRET_KEY=.+|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' >/tmp/seed-hermes-secret-grep.$$ 2>/dev/null; then
+if git grep -nE 'g[h]p_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|PLOW_CHAT_SECRET_KEY=.+|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' >/tmp/seed-hermes-secret-grep.$$ 2>/dev/null; then
   cat /tmp/seed-hermes-secret-grep.$$
   rm -f /tmp/seed-hermes-secret-grep.$$
   fail "tracked files contain secret-looking literal values"

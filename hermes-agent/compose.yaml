@@ -1,8 +1,9 @@
 services:
   hermes:
     image: nousresearch/hermes-agent
-    container_name: ${HERMES_CONTAINER_NAME:-hermes}
+    container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}
     restart: unless-stopped
+    working_dir: /opt/data/workspace
     volumes:
       - ./data:/opt/data
     ports:
