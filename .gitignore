@@ -1,5 +1,8 @@
 .DS_Store
 .test-cache/
+/.env
+/auth.json
+/data/
 
 # Local runtime state. The seed commits only the scaffold and safe defaults.
 hermes-agent/.env
