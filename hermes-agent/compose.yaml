@@ -1,0 +1,19 @@
+services:
+  hermes:
+    image: nousresearch/hermes-agent
+    container_name: ${HERMES_CONTAINER_NAME:-hermes}
+    restart: unless-stopped
+    volumes:
+      - ./data:/opt/data
+    ports:
+      - "${HERMES_API_PORT:-8642}:8642"
+      - "${HERMES_DASHBOARD_PORT:-9119}:9119"
+    command: gateway run
+    environment:
+      HERMES_HOME: /opt/data
+      HERMES_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
+      HERMES_GID: ${HERMES_GID:?Run ./scripts/prepare.sh before docker compose up}
+      HERMES_YOLO_MODE: "1"
+      GATEWAY_ALLOW_ALL_USERS: "true"
+    env_file:
+      - ./data/.env

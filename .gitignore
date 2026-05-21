@@ -1,0 +1,19 @@
+.DS_Store
+
+# Local runtime state. The seed commits only the scaffold and safe defaults.
+hermes-agent/.env
+hermes-agent/data/*
+!hermes-agent/data/.gitkeep
+!hermes-agent/data/config.yaml
+!hermes-agent/data/workspace/
+hermes-agent/data/workspace/*
+!hermes-agent/data/workspace/.gitkeep
+!hermes-agent/data/plugins/
+hermes-agent/data/plugins/*
+!hermes-agent/data/plugins/.gitkeep
+
+# Optional gateway code is fetched during the seed run.
+hermes-agent/data/plugins/plow-chat-platform/
+
+# Local smoke-test artifacts.
+hermes-agent/data/workspace/hermes-write-smoke.txt

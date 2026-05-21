@@ -1,0 +1,8 @@
+plugins:
+  enabled: []
+  disabled: []
+terminal:
+  cwd: /opt/data/workspace
+model:
+  provider: openai-codex
+  default: gpt-5.5
