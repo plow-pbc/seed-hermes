@@ -22,6 +22,7 @@ grep -q 'HERMES_UID:' compose.yaml || fail "HERMES_UID missing"
 grep -q 'HERMES_GID:' compose.yaml || fail "HERMES_GID missing"
 grep -q '\${HERMES_API_PORT:-8642}:8642' compose.yaml || fail "API port is not overridable"
 grep -q '\${HERMES_DASHBOARD_PORT:-9119}:9119' compose.yaml || fail "dashboard port is not overridable"
+grep -q 'HERMES_DASHBOARD: "1"' compose.yaml || fail "dashboard is not enabled by default"
 grep -q 'cwd: /opt/data/workspace' data/config.yaml || fail "terminal.cwd is not /opt/data/workspace"
 grep -q 'provider: openai-codex' data/config.yaml || fail "model.provider is not openai-codex"
 if grep -q 'base_url:' data/config.yaml; then

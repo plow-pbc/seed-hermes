@@ -61,6 +61,39 @@ Port mappings were present while running:
 
 The official image returned an empty HTTP reply for `http://localhost:9119/` on this run, so `check-ready.sh` accepted the Hermes gateway-ready log line, which the design spec permits.
 
+### Dashboard default
+
+Fresh isolated dashboard test:
+
+```sh
+cat > .env <<EOF
+COMPOSE_PROJECT_NAME=hermes-dashboard-test
+HERMES_CONTAINER_NAME=hermes-dashboard-test
+HERMES_UID=$(id -u)
+HERMES_GID=$(id -g)
+HERMES_API_PORT=28642
+HERMES_DASHBOARD_PORT=29119
+EOF
+docker compose --project-name hermes-dashboard-test up -d
+./scripts/check-ready.sh
+curl -sS -o /tmp/hermes-dashboard.html -w '%{http_code}' http://localhost:29119/
+curl -sS -o /tmp/hermes-api-health.out -w '%{http_code}' http://localhost:28642/health
+```
+
+Observed:
+
+```text
+Hermes dashboard is reachable on http://localhost:29119/
+dashboard_http_code=200
+dashboard_title=Hermes Agent - Dashboard
+dashboard_contains_hermes=yes
+api_health_code=000
+Starting hermes dashboard on 0.0.0.0:9119 (background)
+[dashboard]   Hermes Web UI -> http://0.0.0.0:9119
+```
+
+The `api_health_code=000` result was an empty reply, confirming the published `8642` port is not serving the OpenAI-compatible API server by default.
+
 ### File-write cwd regression
 
 Root cause investigated in the Hermes reference source:

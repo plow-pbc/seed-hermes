@@ -10,4 +10,8 @@ Natural file-creation requests land in `hermes-agent/data/workspace/` on the hos
 
 The seed is intentionally generic: platform-specific behavior lives in optional gateway seeds such as `seed-hermes-plow-chat`. The included Plow Chat fetch script is the deliberate seed-run shim that downloads that optional gateway's published file set when the user chooses it.
 
+The Hermes dashboard is enabled by default at `http://localhost:9119`. It shows the local Hermes web UI for sessions, logs, configuration, plugins, and dashboard-backed tools. Inside Docker, the entrypoint binds it to `0.0.0.0` and passes the dashboard's `--insecure` flag; this is acceptable for the disposable local container because the published port is intended for loopback browsing. Do not expose `9119` beyond the trusted local machine.
+
 The Docker compose defaults keep Hermes autonomous inside the disposable container: `HERMES_YOLO_MODE=1` lets the agent act without interactive approval prompts, and `GATEWAY_ALLOW_ALL_USERS=true` lets the gateway accept inbound platform users. For Plow Chat, the access gate is the phone-verification flow: only verified chat members can participate, and the optional plugin's `PLOW_CHAT_AUTO_APPROVE_PAIRING` setting controls whether those verified Plow members are also approved through Hermes' generic pairing layer.
+
+The OpenAI-compatible API server on `8642` is not enabled by default. It is only needed for external OpenAI-compatible clients such as Open WebUI or LibreChat, and should be configured with an API key when used.
