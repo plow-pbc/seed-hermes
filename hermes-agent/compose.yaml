@@ -9,7 +9,13 @@ services:
     ports:
       - "${HERMES_API_PORT:-8642}:8642"
       - "${HERMES_DASHBOARD_PORT:-9119}:9119"
-    command: gateway run
+    # Wrap `gateway run` so `hermes` is on the login-shell PATH for
+    # downstream seeds that drive the container via `docker exec ... bash -lc`
+    # (e.g. seed-hermes-airbnb-manager's courier sidecar, the gbrain
+    # installer). The image installs the binary at /opt/hermes/.venv/bin/hermes;
+    # without the symlink, `bash -lc 'hermes ...'` fails with command not found.
+    command: >
+      bash -c "ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes && exec /opt/hermes/.venv/bin/hermes gateway run"
     environment:
       HERMES_HOME: /opt/data
       HERMES_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
