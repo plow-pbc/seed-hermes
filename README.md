@@ -15,3 +15,27 @@ The Hermes dashboard is enabled by default at `http://localhost:9119`. It shows 
 The Docker compose defaults keep Hermes autonomous inside the disposable container: `HERMES_YOLO_MODE=1` lets the agent act without interactive approval prompts, and `GATEWAY_ALLOW_ALL_USERS=true` lets the gateway accept inbound platform users. Platform-specific seeds are responsible for their own access gates.
 
 The OpenAI-compatible API server on `8642` is not enabled by default. It is only needed for external OpenAI-compatible clients such as Open WebUI or LibreChat, and should be configured with an API key when used.
+
+## Running commands inside the container
+
+`docker compose exec hermes <cmd>` defaults to **root** regardless of the image's `USER` directive. Any command that writes under `data/` (notably `hermes profile create <name>`) then leaves the resulting host bind-mounted files owned by `root:root`, which breaks every subsequent installer that tries to edit those files as the host user.
+
+Always invoke `./scripts/hermes-exec.sh` instead. It is a thin wrapper that prepends `-u $HERMES_UID:$HERMES_GID` (from `.env`) to every `docker compose exec` call:
+
+```sh
+./scripts/hermes-exec.sh hermes profile create daniel
+./scripts/hermes-exec.sh -T hermes profile list
+./scripts/hermes-exec.sh hermes bash -lc 'hermes --version'
+```
+
+Downstream seeds (gbrain installer, airbnb-manager activation, etc.) should call `hermes-exec.sh` rather than raw `docker compose exec`.
+
+## DTU mock for E2E tests (opt-in)
+
+When a downstream seed wants to drive end-to-end tests against a hostex-shaped webhook source, bring DTU up as a compose overlay rather than installing Flask + venv on the host:
+
+```sh
+docker compose -f compose.yaml -f compose.dtu.yaml up -d
+```
+
+DTU runs on the same compose network as Hermes, so the Hermes container reaches it at `http://dtu:8080` and the host reaches it at `http://localhost:${DTU_PORT:-8080}`. See `hermes-agent/dtu/README.md` for the implemented contract and how to swap in your own DTU implementation.

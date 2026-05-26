@@ -1,0 +1,43 @@
+# Opt-in DTU (hostex mock) overlay.
+#
+# Brings up the DTU Flask service on the same compose network as Hermes, so
+# `hermes-daniel` (and any other profile sidecar) can reach it via Docker DNS
+# at `http://dtu:8080` instead of the unreliable `host.docker.internal:8080`
+# hostname (which doesn't resolve inside docker-in-docker substrates).
+#
+# Usage:
+#     ./scripts/prepare.sh
+#     docker compose -f compose.yaml -f compose.dtu.yaml up -d
+#
+#     # From a Hermes container:
+#     curl http://dtu:8080/healthz
+#
+#     # From the host:
+#     curl http://localhost:${DTU_PORT:-8080}/healthz
+#
+# The DTU app code lives in ./dtu/. It implements a minimal hostex contract
+# (conversation fetch + send, webhook callback fan-out, in-memory state) — see
+# dtu/README.md for the full surface area and how to swap in a different
+# implementation.
+
+services:
+  dtu:
+    build:
+      context: ./dtu
+      dockerfile: Dockerfile
+    image: seed-hermes/dtu:local
+    container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}-dtu
+    restart: unless-stopped
+    ports:
+      - "${DTU_PORT:-8080}:8080"
+    environment:
+      DTU_HOST: 0.0.0.0
+      DTU_PORT: "8080"
+      # Where DTU posts message_created webhook callbacks. Defaults to the
+      # Hermes container's webhook adapter on its compose-network hostname.
+      DTU_WEBHOOK_URL: ${DTU_WEBHOOK_URL:-http://hermes:8787/webhooks/hostex-events}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=2).status == 200 else 1)"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
