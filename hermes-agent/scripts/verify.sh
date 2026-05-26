@@ -9,11 +9,20 @@ fail() {
 }
 
 test -f compose.yaml || fail "compose.yaml missing"
+test -f Dockerfile || fail "Dockerfile missing (needed for build-time hermes symlink)"
 test -f data/config.yaml || fail "data/config.yaml missing"
 test -d data/workspace || fail "data/workspace missing"
 test -d data/plugins || fail "data/plugins missing"
 
 grep -q 'container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}' compose.yaml || fail "container name must come from prepare.sh"
+grep -q 'ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes' Dockerfile || fail "Dockerfile does not bake the /usr/local/bin/hermes symlink"
+if grep -q 'ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes' compose.yaml; then
+  fail "compose.yaml still creates the hermes symlink at runtime (must move to Dockerfile)"
+fi
+grep -q 'build:' compose.yaml || fail "compose.yaml must build from the local Dockerfile"
+
+test -x scripts/hermes-exec.sh || fail "scripts/hermes-exec.sh missing or not executable"
+grep -q 'docker compose exec -u' scripts/hermes-exec.sh || fail "hermes-exec.sh must pass -u <uid>:<gid> to docker compose exec"
 grep -q 'COMPOSE_PROJECT_NAME=' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout compose project"
 grep -q 'HERMES_CONTAINER_NAME=' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout container name"
 grep -q 'working_dir: /opt/data/workspace' compose.yaml || fail "container working_dir is not /opt/data/workspace"
