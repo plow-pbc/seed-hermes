@@ -9,7 +9,8 @@ fail() {
 }
 
 test -f compose.yaml || fail "compose.yaml missing"
-test -f Dockerfile || fail "Dockerfile missing (needed for build-time hermes symlink + jq)"
+test -f Dockerfile || fail "Dockerfile missing (needed for build-time hermes symlink + jq + seed-entrypoint install)"
+test -x entrypoint/seed-entrypoint.sh || fail "entrypoint/seed-entrypoint.sh missing or not executable"
 test -f data/config.yaml || fail "data/config.yaml missing"
 test -d data/workspace || fail "data/workspace missing"
 test -d data/plugins || fail "data/plugins missing"
@@ -28,11 +29,21 @@ if grep -q 'ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes' compose.y
 fi
 grep -q 'build:' compose.yaml || fail "compose.yaml must build from the local Dockerfile"
 
-# Permission model contract
-grep -q '^  hermes-init:' compose.yaml || fail "compose.yaml must define a hermes-init service that chowns data/"
-grep -q 'service_completed_successfully' compose.yaml || fail "hermes service must depends_on hermes-init with service_completed_successfully"
+# Entrypoint contract (Pi-substrate Issues 2, 9, 20):
+grep -q 'COPY entrypoint/seed-entrypoint.sh' Dockerfile || fail "Dockerfile does not install seed-entrypoint.sh"
+grep -q 'ENTRYPOINT \["/usr/local/bin/seed-entrypoint.sh"\]' Dockerfile || fail "Dockerfile does not set ENTRYPOINT to seed-entrypoint.sh"
+grep -q 'entrypoint.d' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must run /opt/data/bin/entrypoint.d/*.sh hooks (Pi defect #9)"
+grep -q 'exec gosu' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must gosu-drop to the hermes user"
+grep -qE 'first.*\$1|case.*\$first' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must defend against the flag-shaped first arg dispatcher bug (Pi defect #20)"
+
+# Permission model contract: container starts as root, group_add ties writes
+# to the host gid. The previous hermes-init service was retired in favor of
+# letting seed-entrypoint.sh do the chown from the same root context.
+grep -q 'user: "0:0"' compose.yaml || fail "hermes service must set user: \"0:0\" so seed-entrypoint.sh can chown the bind mount (Pi defect #2)"
+if grep -qE '^  hermes-init:' compose.yaml; then
+  fail "hermes-init service must NOT exist (its work moved into seed-entrypoint.sh)"
+fi
 grep -q 'group_add:' compose.yaml || fail "hermes service must group_add the host gid so writes are host-readable+writable"
-grep -q 'umask 002' compose.yaml || fail "hermes command must set umask 002 so new files are group-writable"
 
 # .env contract: HERMES_UID/GID match the image (10000), and HERMES_HOST_GID
 # is recorded for the init service + group_add.
