@@ -9,62 +9,46 @@ fail() {
 }
 
 test -f compose.yaml || fail "compose.yaml missing"
-test -f Dockerfile || fail "Dockerfile missing (needed for build-time hermes symlink + jq + seed-entrypoint install)"
-test -x entrypoint/seed-entrypoint.sh || fail "entrypoint/seed-entrypoint.sh missing or not executable"
 test -f data/config.yaml || fail "data/config.yaml missing"
 test -d data/workspace || fail "data/workspace missing"
 test -d data/plugins || fail "data/plugins missing"
 test -d data/profiles || fail "data/profiles missing"
-# Runtime subdirs pre-created by prepare.sh so the container doesn't have to
-# mkdir at startup on a bind-mounted parent it doesn't own yet.
-for sub in cron sessions logs hooks memories skills skins plans home; do
-  test -d "data/$sub" || fail "data/$sub missing (prepare.sh must pre-create runtime subdirs)"
-done
 
 grep -q 'container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}' compose.yaml || fail "container name must come from prepare.sh"
-grep -q 'ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes' Dockerfile || fail "Dockerfile does not bake the /usr/local/bin/hermes symlink"
-grep -qE 'apt-get install.*jq' Dockerfile || fail "Dockerfile does not bake jq (defect #21)"
-if grep -q 'ln -sf /opt/hermes/.venv/bin/hermes /usr/local/bin/hermes' compose.yaml; then
-  fail "compose.yaml still creates the hermes symlink at runtime (must move to Dockerfile)"
+grep -q '^    image: nousresearch/hermes-agent:latest' compose.yaml || fail "compose must use upstream image directly (no derived Dockerfile)"
+if grep -q '^    build:' compose.yaml; then
+  fail "compose must NOT build a derived image — upstream image already does init+UID+codex-fix natively"
 fi
-grep -q 'build:' compose.yaml || fail "compose.yaml must build from the local Dockerfile"
-
-# Entrypoint contract (Pi-substrate Issues 2, 9, 20):
-grep -q 'COPY entrypoint/seed-entrypoint.sh' Dockerfile || fail "Dockerfile does not install seed-entrypoint.sh"
-grep -q 'ENTRYPOINT \["/usr/local/bin/seed-entrypoint.sh"\]' Dockerfile || fail "Dockerfile does not set ENTRYPOINT to seed-entrypoint.sh"
-grep -q 'entrypoint.d' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must run /opt/data/bin/entrypoint.d/*.sh hooks (Pi defect #9)"
-grep -q 'exec gosu' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must gosu-drop to the hermes user"
-grep -qE 'first.*\$1|case.*\$first' entrypoint/seed-entrypoint.sh || fail "seed-entrypoint.sh must defend against the flag-shaped first arg dispatcher bug (Pi defect #20)"
-
-# Permission model contract: container starts as root, group_add ties writes
-# to the host gid. The previous hermes-init service was retired in favor of
-# letting seed-entrypoint.sh do the chown from the same root context.
-grep -q 'user: "0:0"' compose.yaml || fail "hermes service must set user: \"0:0\" so seed-entrypoint.sh can chown the bind mount (Pi defect #2)"
-if grep -qE '^  hermes-init:' compose.yaml; then
-  fail "hermes-init service must NOT exist (its work moved into seed-entrypoint.sh)"
+if grep -q '^    entrypoint:' compose.yaml; then
+  fail "compose must NOT set entrypoint — image's /init + main-wrapper.sh is the canonical entrypoint"
 fi
-grep -q 'group_add:' compose.yaml || fail "hermes service must group_add the host gid so writes are host-readable+writable"
+if grep -q '^    user:' compose.yaml; then
+  fail "compose must NOT set user — image stage2-hook reads HERMES_UID and remaps the in-container hermes user itself"
+fi
+if grep -q '^    group_add:' compose.yaml; then
+  fail "compose must NOT group_add — image stage2-hook chowns to the remapped hermes uid/gid directly"
+fi
 
-# .env contract: HERMES_UID/GID match the image (10000), and HERMES_HOST_GID
-# is recorded for the init service + group_add.
-test -f .env || fail ".env missing — run ./scripts/prepare.sh"
-grep -qx 'HERMES_UID=10000' .env || fail ".env HERMES_UID must be 10000 (image-baked container user), not the host uid"
-grep -qx 'HERMES_GID=10000' .env || fail ".env HERMES_GID must be 10000 (image-baked container user), not the host gid"
-grep -q '^HERMES_HOST_GID=' .env || fail ".env must define HERMES_HOST_GID (used by hermes-init chown + main service group_add)"
-grep -q '^HERMES_HOST_UID=' .env || fail ".env must define HERMES_HOST_UID"
+if [ -e Dockerfile ]; then
+  fail "Dockerfile must NOT exist — upstream image now does init+UID+codex-fix natively (PRs #3/#4/#5 architecture superseded)"
+fi
+if [ -e entrypoint ]; then
+  fail "entrypoint/ directory must NOT exist — seed-entrypoint.sh's responsibilities moved into the upstream image's stage2-hook + main-wrapper.sh"
+fi
 
-test -x scripts/hermes-exec.sh || fail "scripts/hermes-exec.sh missing or not executable"
-grep -q 'docker compose exec -u' scripts/hermes-exec.sh || fail "hermes-exec.sh must pass -u <uid>:<gid> to docker compose exec"
-
-test -x scripts/yaml-get.sh || fail "scripts/yaml-get.sh missing or not executable (defect #31 — replaces host PyYAML dep)"
-grep -q 'docker compose exec -T hermes' scripts/yaml-get.sh || fail "yaml-get.sh must shell into the hermes container"
+test -x cont-init.d/50-install-jq.sh || fail "cont-init.d/50-install-jq.sh missing or not executable"
+grep -q '\./cont-init\.d/50-install-jq\.sh:/etc/cont-init\.d/50-install-jq\.sh:ro' compose.yaml \
+  || fail "compose must bind-mount the jq cont-init hook into /etc/cont-init.d/"
 
 grep -q 'COMPOSE_PROJECT_NAME' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout compose project"
 grep -q 'HERMES_CONTAINER_NAME' scripts/prepare.sh || fail "prepare.sh does not set a per-checkout container name"
+grep -q 'HOST_UID="\$(id -u)"' scripts/prepare.sh || fail "prepare.sh must source HERMES_UID from \$(id -u) — image stage2-hook remaps the in-container hermes user to it"
+grep -q 'HOST_GID="\$(id -g)"' scripts/prepare.sh || fail "prepare.sh must source HERMES_GID from \$(id -g)"
+
 grep -q 'working_dir: /opt/data/workspace' compose.yaml || fail "container working_dir is not /opt/data/workspace"
 grep -q './data:/opt/data' compose.yaml || fail "whole data volume is not mounted"
-grep -q 'HERMES_UID:' compose.yaml || fail "HERMES_UID missing"
-grep -q 'HERMES_GID:' compose.yaml || fail "HERMES_GID missing"
+grep -q 'HERMES_UID:' compose.yaml || fail "HERMES_UID env var missing from compose"
+grep -q 'HERMES_GID:' compose.yaml || fail "HERMES_GID env var missing from compose"
 grep -q '\${HERMES_API_PORT:-8642}:8642' compose.yaml || fail "API port is not overridable"
 grep -q '\${HERMES_DASHBOARD_PORT:-9119}:9119' compose.yaml || fail "dashboard port is not overridable"
 grep -q 'HERMES_DASHBOARD: "1"' compose.yaml || fail "dashboard is not enabled by default"
@@ -73,6 +57,21 @@ grep -q 'provider: openai-codex' data/config.yaml || fail "model.provider is not
 if grep -q 'base_url:' data/config.yaml; then
   fail "data/config.yaml must not set model.base_url for openai-codex"
 fi
+
+# .env contract: HERMES_UID/GID must be host id (image stage2-hook remaps).
+test -f .env || fail ".env missing — run ./scripts/prepare.sh"
+host_uid="$(id -u)"; host_gid="$(id -g)"
+grep -qx "HERMES_UID=${host_uid}" .env || fail ".env HERMES_UID must be host \$(id -u)=${host_uid}; image stage2-hook remaps the in-container hermes user to it"
+grep -qx "HERMES_GID=${host_gid}" .env || fail ".env HERMES_GID must be host \$(id -g)=${host_gid}"
+if grep -qE '^HERMES_HOST_(UID|GID)=' .env; then
+  fail ".env must NOT contain HERMES_HOST_UID/HERMES_HOST_GID — those keys were retired with seed-entrypoint.sh"
+fi
+
+test -x scripts/hermes-exec.sh || fail "scripts/hermes-exec.sh missing or not executable"
+grep -q 'docker compose exec -u' scripts/hermes-exec.sh || fail "hermes-exec.sh must pass -u <uid>:<gid> to docker compose exec"
+
+test -x scripts/yaml-get.sh || fail "scripts/yaml-get.sh missing or not executable"
+grep -q 'docker compose exec -T hermes' scripts/yaml-get.sh || fail "yaml-get.sh must shell into the hermes container"
 
 cd ..
 git check-ignore -q hermes-agent/.env || fail "hermes-agent/.env is not git-ignored"
