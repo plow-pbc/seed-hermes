@@ -1,9 +1,48 @@
 services:
+  # One-shot init: chown data/ to the image's container user, set setgid + 2775
+  # on dirs and 0664 on files so the main service (uid 10000) AND the host
+  # (gid HERMES_HOST_GID, via group_add on the hermes service) can both read
+  # and write the bind mount.
+  #
+  # Runs as root INSIDE Docker — no host sudo required. This replaces the
+  # `sudo chown -R 10000:10000 data` step the v2 substrate operator had to run
+  # manually at every install phase (defects #6, #7, #8, #9, #15, #16, #20,
+  # #25).
+  hermes-init:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: seed-hermes/hermes-agent:local
+    container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}-init
+    user: "0:0"
+    volumes:
+      - ./data:/opt/data
+    environment:
+      HERMES_CONTAINER_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
+      HERMES_CONTAINER_GID: ${HERMES_GID:?Run ./scripts/prepare.sh before docker compose up}
+      HERMES_HOST_GID: ${HERMES_HOST_GID:?Run ./scripts/prepare.sh before docker compose up}
+    command:
+      - bash
+      - -c
+      - |
+        set -e
+        mkdir -p /opt/data/workspace /opt/data/plugins /opt/data/profiles \
+                 /opt/data/cron /opt/data/sessions /opt/data/logs \
+                 /opt/data/hooks /opt/data/memories /opt/data/skills \
+                 /opt/data/skins /opt/data/plans /opt/data/home
+        # Owner = container user (writes); group = host gid (host reads/writes
+        # via group_add on the main service). setgid (2xxx) makes new files
+        # inherit the host gid even when the container's primary gid is 10000.
+        chown -R "${HERMES_CONTAINER_UID}:${HERMES_HOST_GID}" /opt/data
+        find /opt/data -type d -exec chmod 2775 {} +
+        find /opt/data -type f -exec chmod 0664 {} +
+    restart: "no"
+
   hermes:
     # Derived from nousresearch/hermes-agent; bakes the
-    # /usr/local/bin/hermes -> /opt/hermes/.venv/bin/hermes symlink at build
-    # time so `bash -lc 'hermes ...'` works in downstream seeds without a
-    # runtime ln (which fails as non-root). See ./Dockerfile for rationale.
+    # /usr/local/bin/hermes -> /opt/hermes/.venv/bin/hermes symlink and `jq`
+    # so `bash -lc 'hermes ...'` and the hostex-ingest scripts work in
+    # downstream seeds without runtime apt-get install. See ./Dockerfile.
     build:
       context: .
       dockerfile: Dockerfile
@@ -11,12 +50,29 @@ services:
     container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}
     restart: unless-stopped
     working_dir: /opt/data/workspace
+    depends_on:
+      hermes-init:
+        condition: service_completed_successfully
     volumes:
       - ./data:/opt/data
     ports:
       - "${HERMES_API_PORT:-8642}:8642"
       - "${HERMES_DASHBOARD_PORT:-9119}:9119"
-    command: ["/opt/hermes/.venv/bin/hermes", "gateway", "run"]
+    # umask 002 so files Hermes writes are group-writable; combined with
+    # group_add: HERMES_HOST_GID below, host users can edit profile .env files,
+    # webhook_subscriptions.json, etc. without `sudo chmod a+rwX data` after
+    # every container write.
+    command:
+      - bash
+      - -c
+      - |
+        umask 002
+        exec /opt/hermes/.venv/bin/hermes gateway run
+    # Adds the host's primary GID as a supplementary group inside the
+    # container, so the runtime's writes (via setgid-inherited group) end up
+    # owned by gid HERMES_HOST_GID and are host-writable through group bits.
+    group_add:
+      - "${HERMES_HOST_GID:?Run ./scripts/prepare.sh before docker compose up}"
     environment:
       HERMES_HOME: /opt/data
       HERMES_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
