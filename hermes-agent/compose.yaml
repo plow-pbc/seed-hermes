@@ -1,55 +1,50 @@
 services:
   hermes:
-    # Derived from nousresearch/hermes-agent. The derived Dockerfile installs
-    # /usr/local/bin/seed-entrypoint.sh as the container ENTRYPOINT. That
-    # script:
-    #   1. pre-creates Hermes runtime subdirs under /opt/data
-    #   2. chowns /opt/data to HERMES_UID:HERMES_HOST_GID with setgid 2775
-    #      dirs / 0664 files (so the host can read+write via group bits)
-    #   3. runs /opt/data/bin/entrypoint.d/*.sh hooks as root — the canonical
-    #      place for downstream seeds to drop patch-re-apply scripts that
-    #      would otherwise be lost on container recreate
-    #   4. wraps argv with `/opt/hermes/.venv/bin/hermes` when the first arg
-    #      starts with `-`, so the upstream dispatcher's `command -v "-p"`
-    #      bug never fires
-    #   5. gosu-drops to the image-baked hermes user
-    # See ./Dockerfile + ./entrypoint/seed-entrypoint.sh for the full
-    # rationale (covers Pi-substrate Issues 2, 9, 20).
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: seed-hermes/hermes-agent:local
+    # Use the upstream image directly. Its ENTRYPOINT is
+    # `/init /opt/hermes/docker/main-wrapper.sh` (s6-overlay 3.2.3.0). The
+    # image's stage2-hook (wired via /etc/cont-init.d/01-hermes-setup) does
+    # everything we used to do in seed-entrypoint.sh:
+    #   - usermod -u $HERMES_UID hermes  (UID remap so bind-mounted writes
+    #                                     land at the host user's UID)
+    #   - groupmod -o -g $HERMES_GID hermes
+    #   - targeted chown of hermes-owned subdirs (cron, sessions, logs,
+    #     hooks, memories, skills, skins, plans, workspace, home, profiles)
+    #   - rootless-Podman-safe (chown failures don't abort)
+    # main-wrapper.sh then drops privileges via s6-setuidgid hermes and
+    # exec's the command. See the deprecated docker/entrypoint.sh shim
+    # inside the image for the migration note.
+    #
+    # This compose deliberately does NOT set `user:`, `entrypoint:`,
+    # `group_add:`, or any chown overlay. The image's stage2-hook is the
+    # single source of truth for permission setup.
+    image: nousresearch/hermes-agent:latest
     container_name: ${HERMES_CONTAINER_NAME:?Run ./scripts/prepare.sh before docker compose up}
     restart: unless-stopped
     working_dir: /opt/data/workspace
-    # MUST start as root: seed-entrypoint.sh needs root to chown the bind
-    # mount and patch /opt/hermes/* via entrypoint.d hooks. On macOS Docker
-    # Desktop the previous image-USER-hermes default happened to work via
-    # osxfs/VirtioFS UID translation; on Linux native it crashlooped with
-    # "Permission denied" because UID 10000 can't write a bind mount the
-    # host owns at mode 700. Pi-substrate Issue 2.
-    user: "0:0"
     volumes:
       - ./data:/opt/data
+      # Bind-mount a single cont-init.d hook to install jq if missing.
+      # jq is still absent from nousresearch/hermes-agent:latest as of
+      # 2026-05-27, and the hostex-history-ingest scripts depend on it.
+      # Mounting one file (not the directory) preserves the image's own
+      # /etc/cont-init.d/* scripts (015-supervise-perms, 02-reconcile-profiles).
+      # If a future image bakes jq in, delete this mount + the hook file.
+      - ./cont-init.d/50-install-jq.sh:/etc/cont-init.d/50-install-jq.sh:ro
     ports:
       - "${HERMES_API_PORT:-8642}:8642"
       - "${HERMES_DASHBOARD_PORT:-9119}:9119"
-    # Command is the *argv passed to seed-entrypoint.sh*, which handles
-    # privilege drop. Explicit absolute path bypasses the upstream
-    # entrypoint dispatcher's `command -v` heuristic (Pi-substrate Issue
-    # 20); seed-entrypoint.sh also rewrites flag-shaped argv defensively.
-    command: ["/opt/hermes/.venv/bin/hermes", "gateway", "run"]
-    # Host's primary GID as a supplementary group for the dropped hermes
-    # user. Combined with the setgid 2775 dirs that seed-entrypoint.sh sets,
-    # files Hermes creates end up group-owned by HERMES_HOST_GID and are
-    # host-readable AND host-writable without sudo.
-    group_add:
-      - "${HERMES_HOST_GID:?Run ./scripts/prepare.sh before docker compose up}"
+    # Run the gateway, not the interactive REPL. Without this, the image's
+    # main-wrapper.sh falls back to `hermes` (interactive) which exits at
+    # boot in `docker compose up -d` with "Input is not a terminal (fd=0)".
+    command: ["gateway", "run"]
     environment:
+      # The image's stage2-hook reads HERMES_UID and HERMES_GID to remap
+      # the in-container `hermes` user to match the host user, so files
+      # the container writes to the bind mount land at host-owned UIDs.
+      # `prepare.sh` writes these as `$(id -u)` / `$(id -g)`.
       HERMES_HOME: /opt/data
       HERMES_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
       HERMES_GID: ${HERMES_GID:?Run ./scripts/prepare.sh before docker compose up}
-      HERMES_HOST_GID: ${HERMES_HOST_GID:?Run ./scripts/prepare.sh before docker compose up}
       HERMES_DASHBOARD: "1"
       HERMES_YOLO_MODE: "1"
       GATEWAY_ALLOW_ALL_USERS: "true"

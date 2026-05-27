@@ -10,39 +10,61 @@ Natural file-creation requests land in `hermes-agent/data/workspace/` on the hos
 
 ## Permission model — host + container share data/
 
-The upstream `nousresearch/hermes-agent` image runs its runtime as `hermes` (UID/GID **10000**), and the container writes the bind-mounted `./data/` tree heavily (sessions, cron, logs, hooks, memories, profiles, ...). The host also needs to read and edit some of those files (`.env`, `config.yaml`, profile env files for installers). The seed makes those two needs coexist without `sudo chown` at every install phase:
+The seed uses the upstream `nousresearch/hermes-agent:latest` image directly and lets its s6-overlay `/init` handle the bootstrap. Specifically, the image's `cont-init.d/01-hermes-setup` (the stage2-hook) does this on every container start:
 
-- `prepare.sh` writes `HERMES_UID=10000`, `HERMES_GID=10000` to `hermes-agent/.env` (canonical container user — downstream sidecars and installers read these and target the correct user) and records `HERMES_HOST_GID` separately.
-- `compose.yaml` sets `user: "0:0"` on the `hermes` service so the container starts as root. The derived image's `ENTRYPOINT` is `seed-entrypoint.sh` (see `entrypoint/seed-entrypoint.sh`), which:
-  - pre-creates `data/{workspace,plugins,profiles,cron,sessions,logs,hooks,memories,skills,skins,plans,home}` so Hermes never has to `mkdir` against a parent it doesn't own;
-  - `chown -R 10000:HERMES_HOST_GID /opt/data`;
-  - `chmod 2775` on directories (setgid + group rwx), `chmod 0664` on files;
-  - runs any executable under `/opt/data/bin/entrypoint.d/*.sh` (the canonical patch-re-apply hook, see below);
-  - `gosu`-drops to the image-baked hermes user and exec's the command.
-- The `hermes` service adds `group_add: [HERMES_HOST_GID]`. New files Hermes creates inherit `HERMES_HOST_GID` via the setgid bit, end up mode `0664`, and are group-readable AND group-writable by the host user.
+1. Reads `HERMES_UID` and `HERMES_GID` from the environment, then `usermod -u $HERMES_UID hermes` and `groupmod -o -g $HERMES_GID hermes`. The in-container `hermes` user is now at the host user's UID/GID.
+2. Targeted-chowns the hermes-owned subdirs of `/opt/data` (`cron`, `sessions`, `logs`, `hooks`, `memories`, `skills`, `skins`, `plans`, `workspace`, `home`, `profiles`) to the remapped uid/gid. Rootless-Podman-safe — `chown` failures don't abort.
+3. The image's `main-wrapper.sh` (run as `/init`'s main program) drops privileges via `s6-setuidgid hermes` and exec's the command.
 
-Net effect: the v2 substrate run's recurring `Permission denied` / `sudo chown -R 10000:10000 data` / `sudo chmod -R a+rwX data` pattern at Phase 2, 2.5, 4, 6, 8 is replaced by a single `prepare.sh` + `docker compose up -d` from a clean checkout, on **Linux native Docker** as well as macOS Docker Desktop.
+`prepare.sh` writes `HERMES_UID=$(id -u)` and `HERMES_GID=$(id -g)` to `hermes-agent/.env`. So after the stage2-hook remap, all bind-mounted writes land at host-owned UIDs — host and container share `data/` natively without any group_add, setgid, or chmod gymnastics.
 
-(Previous versions of this seed used a separate `hermes-init` Compose service to do the chown. The Pi clean-install run showed that approach fought the upstream entrypoint's intended Linux flow: the upstream entrypoint *expects* to start as root so it can do its own privilege handling. Folding the chown into our own root-side `seed-entrypoint.sh` and setting `user: "0:0"` aligns with that expectation.)
+Migration: `prepare.sh` rewrites stale `HERMES_UID=10000` / `HERMES_HOST_UID` / `HERMES_HOST_GID` keys (from earlier seed versions that used a derived image with a custom entrypoint) in place — running it on an existing checkout is enough.
 
-If you ever see `Permission denied` on a path under `data/` after this seed is up, `docker compose restart hermes` will re-run the chown idempotently — there is never a reason to `sudo` from the host.
+## Why no derived image and no custom entrypoint
 
-## Boot-time hooks for patches and runtime fixes
+Earlier versions of this seed (PRs #2–#5) shipped:
 
-Downstream seeds occasionally need to patch files under `/opt/hermes/*` (the runtime), install a missing system package, or re-create a symlink that lives in the container's writable layer. Doing those imperatively via `docker exec -u 0:0` works once — but on the next `docker compose up -d --force-recreate` the writable layer is gone and every patch evaporates.
+- a derived `Dockerfile` (FROM nousresearch/hermes-agent) that baked in `jq`, a `/usr/local/bin/hermes` symlink, and two SDK patches for the Codex `'NoneType' object is not iterable` crash;
+- a `seed-entrypoint.sh` that ran a `data/bin/entrypoint.d/*.sh` hook directory and `gosu`-dropped to the hermes user;
+- a separate `hermes-init` Compose service (later folded into `seed-entrypoint.sh`) that chowned `/opt/data`.
 
-The seed provides a canonical hook directory: **`hermes-agent/data/bin/entrypoint.d/`**. Drop an executable script in there (`01-name.sh`, `05-other.sh`, …) and `seed-entrypoint.sh` runs it as root on every container start, in lexicographic order, before the privilege drop.
+The upstream image was re-pushed on 2026-05-27 with an s6-overlay rebuild that now does everything we patched:
 
-Examples that belong here:
+| | Old image (PRs #3/#4/#5 targeted) | Current `:latest` |
+|---|---|---|
+| ENTRYPOINT | upstream `entrypoint.sh` (drops to hermes too early) | `/init` + `main-wrapper.sh` (s6-overlay) |
+| `usermod` + chown | did not happen | stage2-hook (cont-init.d) |
+| privilege drop | `gosu` | `s6-setuidgid` |
+| `gosu` binary | present | **REMOVED** |
+| `hermes` on `$PATH` | only via our symlink | `/opt/hermes/.venv/bin/` already on PATH |
+| Codex `'NoneType'` SDK crash | required two build-time patches | fixed structurally |
+| `jq` | absent (our Dockerfile installed) | **still absent** ← we ship a one-line cont-init hook |
 
-```sh
-hermes-agent/data/bin/entrypoint.d/
-  01-openai-sdk-patch.sh       # idempotent sed to tolerate `output is None`
-  05-webhook-insecure-patch.sh # INSECURE_NO_AUTH safety-rail bypass for DTU tests
-  10-gbrain-symlinks.sh        # /usr/local/bin/{bun,gbrain} re-link
+Our seed-entrypoint.sh literally called `gosu` to drop privileges; against the new image it would fail-loud at boot. Rather than rev the wrapper, this version subtracts: no Dockerfile, no seed-entrypoint, no `user: "0:0"` override, no `group_add`. The compose file pulls `nousresearch/hermes-agent:latest` directly.
+
+## Installing one missing package: `jq`
+
+The new image still ships without `jq`, which downstream hostex-history-ingest scripts depend on. Rather than reintroduce a derived image just for one binary, the seed bind-mounts a single s6-overlay cont-init hook into the container:
+
+```
+./cont-init.d/50-install-jq.sh → /etc/cont-init.d/50-install-jq.sh
 ```
 
-Hooks must be idempotent (the entrypoint runs them at every boot) and silent on the happy path. A hook that exits non-zero aborts boot — don't swallow real errors with `|| true`.
+On every boot s6-overlay runs `/etc/cont-init.d/*` as root before any supervised service starts. `50-install-jq.sh` is idempotent — `command -v jq && exit 0` — and only runs `apt-get install -y --no-install-recommends jq` if the binary is missing. The image's own cont-init scripts (`015-supervise-perms`, `02-reconcile-profiles`) still run because we bind-mount a single file, not the whole directory.
+
+If a future image bakes `jq` in, delete the hook file + the compose volume entry. The presence check makes the hook safe either way.
+
+## Downstream seeds that need boot-time hooks
+
+The old `data/bin/entrypoint.d/*.sh` directory has been retired (it was our entrypoint's invention; the upstream image doesn't know about it). Downstream seeds that need to re-apply runtime patches on every container start should follow the same pattern as `cont-init.d/50-install-jq.sh`:
+
+1. Drop a script in your seed's own `cont-init.d/` directory.
+2. Add a volume mount in your compose overlay:
+   ```yaml
+   volumes:
+     - ./cont-init.d/<NN>-name.sh:/etc/cont-init.d/<NN>-name.sh:ro
+   ```
+3. Make the script idempotent. s6-overlay runs it as root before supervised services start, with `#!/usr/bin/with-contenv sh` to inherit the container's environment.
 
 The seed is intentionally generic: platform-specific behavior lives in optional gateway seeds. This repo ships no gateway install scripts; gateway seeds own their own plugin files, host orchestration, and verification.
 
@@ -82,7 +104,7 @@ Exit codes: `0` = found, `2` = key absent, `1` = file or YAML error. Downstream 
 
 ## Other baked-in dependencies
 
-The derived Dockerfile installs `jq` into the image layer. The hostex history-ingest scripts (`ingest-lib.sh`) call `jq` heavily, and the v2 run lost it on every `docker compose down/up` because the operator had been installing it at runtime via `docker exec -u 0:0 apt-get`. Baking it into the image makes it survive container recreates.
+`jq` is installed by the cont-init.d hook on first boot (see *Installing one missing package: `jq`* above). Re-pulling the image still requires `apt-get install` on boot, which is fast over a normal connection — but if you need it pre-baked, override the seed by building your own derived image.
 
 `gh` (GitHub CLI) is **not** baked in. The seed and downstream installers always use the HTTPS-clone fallback (`git clone https://github.com/...`), so `gh` is purely optional convenience for human operators.
 
