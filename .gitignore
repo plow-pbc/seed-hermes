@@ -20,5 +20,6 @@ hermes-agent/data/plugins/*
 hermes-agent/data/workspace/hermes-write-smoke.txt
 
 # SEED report artifacts
+audit-report.json
 verify-report.json
 install-report.json
