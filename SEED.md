@@ -1,6 +1,6 @@
 # Purpose
 
-> See [[README#Purpose]].
+> See the [Purpose section of the README](README.md#purpose).
 
 ## Normative Language
 
@@ -22,7 +22,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Hermes agent folder
 
-- `hermes-agent/` is the Docker-only host workspace for Hermes Agent. ^obj-hermes-agent-folder
+- `hermes-agent/` is the Docker-only host workspace for Hermes Agent.
 - `hermes-agent/compose.yaml` MUST define one service named `hermes` that uses the upstream image directly (`image: nousresearch/hermes-agent:latest`). It MUST NOT `build:` a derived image, MUST NOT set `entrypoint:`, MUST NOT set `user:`, and MUST NOT use `group_add:`. The image's s6-overlay `ENTRYPOINT` (`/init` + `/opt/hermes/docker/main-wrapper.sh`) and its `cont-init.d/01-hermes-setup` (the stage2-hook) are the canonical bootstrap path; overriding any of them re-introduces the v1/PR-#3 permission-model drift.
 - The seed MUST NOT ship a `hermes-agent/Dockerfile`. The previous derived image (PRs #2/#3/#5) baked in the `/usr/local/bin/hermes` symlink, `jq`, and two Codex `'NoneType'` SDK patches. As of the 2026-05-27 `nousresearch/hermes-agent:latest` re-push, `hermes` is already on `$PATH` at `/opt/hermes/.venv/bin/hermes`, the Codex crash is fixed structurally, and the only remaining gap (`jq`) is handled by a single cont-init.d hook (see below).
 - The seed MUST NOT ship a `hermes-agent/entrypoint/seed-entrypoint.sh`. The s6-overlay-based image now does what that wrapper did natively: stage2-hook handles `usermod` + targeted `chown` of `/opt/data` hermes-owned subdirs, and `main-wrapper.sh` drops privileges via `s6-setuidgid`. The previous wrapper called `gosu` which has been removed from the new image — a residual wrapper would fail-loud at boot.
@@ -45,7 +45,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Hermes data folder
 
-- `hermes-agent/data/` is `HERMES_HOME` inside the container. ^obj-hermes-data
+- `hermes-agent/data/` is `HERMES_HOME` inside the container.
 - `hermes-agent/data/config.yaml` MUST exist before first boot.
 - `hermes-agent/data/config.yaml` MUST set `terminal.cwd: /opt/data/workspace`.
 - The container process cwd and `terminal.cwd` MUST both point at `/opt/data/workspace`; natural file-creation requests should therefore use `hermes-agent/data/workspace/` on the host without first trying `/opt/hermes`.
@@ -58,7 +58,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Platform gateway
 
-- A platform gateway is OPTIONAL. ^obj-platform-gateway
+- A platform gateway is OPTIONAL.
 - This seed MUST NOT ship gateway install scripts or gateway-specific plugin files.
 - Gateway plugins live under `hermes-agent/data/plugins/<name>/` on the host, which is `/opt/data/plugins/<name>/` inside the container.
 - If a platform gateway is installed by its own seed, `hermes-agent/data/config.yaml` MUST enable that plugin under `plugins.enabled`.
@@ -68,7 +68,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Hermes scaffold is prepared
 
-The agent prepares the Docker-only Hermes workspace without requiring host-local Hermes or Python. ^act-prepare-scaffold
+The agent prepares the Docker-only Hermes workspace without requiring host-local Hermes or Python.
 
 1. Change into `hermes-agent/`.
 2. Run `./scripts/prepare.sh`.
@@ -78,7 +78,7 @@ The agent prepares the Docker-only Hermes workspace without requiring host-local
 
 ### Platform gateway choice is handled
 
-The agent asks the user whether they want a platform gateway. ^act-platform-choice
+The agent asks the user whether they want a platform gateway.
 
 1. Ask: "Want a platform gateway? I can follow the optional iMessage/RCS gateway seed so you can chat with Hermes from your phone."
 2. If the user declines, leave `plugins.enabled` unchanged and continue with gateway-less Hermes.
@@ -88,7 +88,7 @@ The agent asks the user whether they want a platform gateway. ^act-platform-choi
 
 ### ChatGPT OAuth is completed
 
-The agent drives Hermes' `openai-codex` OAuth device-code flow headlessly. ^act-openai-codex-auth
+The agent drives Hermes' `openai-codex` OAuth device-code flow headlessly.
 
 1. Run `./scripts/auth-openai-codex.sh`, which invokes `docker compose run --rm -T hermes auth add openai-codex`.
 2. Relay `https://auth.openai.com/codex/device` to the user.
@@ -100,7 +100,7 @@ The agent drives Hermes' `openai-codex` OAuth device-code flow headlessly. ^act-
 
 ### Hermes is started
 
-The agent starts Hermes in Docker. ^act-start-hermes
+The agent starts Hermes in Docker.
 
 1. Change into `hermes-agent/`.
 2. Run `docker compose up -d`.
@@ -111,7 +111,7 @@ The agent starts Hermes in Docker. ^act-start-hermes
 
 ### DTU mock service (optional)
 
-- `hermes-agent/compose.dtu.yaml` is an OPTIONAL compose overlay that brings up a Flask-based hostex mock (DTU) on the same compose network as Hermes. ^obj-dtu
+- `hermes-agent/compose.dtu.yaml` is an OPTIONAL compose overlay that brings up a Flask-based hostex mock (DTU) on the same compose network as Hermes.
 - DTU MUST NOT be brought up by default; it is opt-in via `docker compose -f compose.yaml -f compose.dtu.yaml up -d`.
 - DTU MUST be reachable from the Hermes container at `http://dtu:8080` (compose-network DNS) so downstream seeds do not have to rely on `host.docker.internal` (which does not resolve inside Docker-in-Docker substrates).
 - The DTU build context lives at `hermes-agent/dtu/`. The shipped `app.py` implements the minimal hostex contract documented in `hermes-agent/dtu/README.md`; it MAY be replaced with a richer implementation provided the same endpoint surface is preserved.
