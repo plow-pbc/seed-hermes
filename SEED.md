@@ -1,6 +1,6 @@
 # Purpose
 
-> See the [Purpose section of the README](README.md#purpose).
+> See [README#Purpose](README.md#purpose).
 
 ## Normative Language
 
@@ -10,7 +10,8 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Host tools
 
-- Docker with Compose support MUST be available on the host.
+- Docker Engine MUST be available on the host, with the installing user able to run `docker` (root not required; docker-group membership suffices).
+- The Docker Compose v2 CLI plugin (`docker compose`) MUST be available. If it is absent, the install MUST satisfy this dependency itself via the host package manager (see `## Actions` > "Compose plugin is ensured") rather than assuming it is pre-installed.
 - A POSIX shell and `curl` MUST be available on the host.
 - A ChatGPT account capable of completing Hermes' `openai-codex` OAuth device-code flow MUST be available when model auth is performed.
 
@@ -66,6 +67,15 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ## Actions
 
+### Compose plugin is ensured
+
+The agent makes `docker compose` available before any compose-dependent step, without assuming it is pre-installed.
+
+1. Run `docker compose version`. If it succeeds, this dependency is already satisfied; skip the remaining steps (the install MUST NOT reinstall or upgrade an existing Compose plugin).
+2. Otherwise run `sudo apt-get update`, then `sudo apt-get install -y docker-compose-plugin || sudo apt-get install -y docker-compose-v2`. (`docker-compose-plugin` is the package name in Docker's official apt repository; `docker-compose-v2` is the stock Ubuntu/Debian name. The seed cannot know which Docker source the host used, so it MUST try both.)
+3. Re-run `docker compose version`; it MUST now succeed. If it does not, stop and report the failure loudly — compose-dependent steps MUST NOT be attempted.
+4. On hosts without apt (e.g. macOS Docker Desktop, which bundles Compose), step 1 normally already passes; if it does not, install the Compose v2 plugin with the host's native mechanism and repeat step 3.
+
 ### Hermes scaffold is prepared
 
 The agent prepares the Docker-only Hermes workspace without requiring host-local Hermes or Python.
@@ -116,8 +126,9 @@ The agent starts Hermes in Docker.
 - DTU MUST be reachable from the Hermes container at `http://dtu:8080` (compose-network DNS) so downstream seeds do not have to rely on `host.docker.internal` (which does not resolve inside Docker-in-Docker substrates).
 - The DTU build context lives at `hermes-agent/dtu/`. The shipped `app.py` implements the minimal hostex contract documented in `hermes-agent/dtu/README.md`; it MAY be replaced with a richer implementation provided the same endpoint surface is preserved.
 
-## Verify
+## Verification
 
+0. Run `docker compose version`; it MUST print a Compose v2 version (the "Compose plugin is ensured" Action satisfies this when the plugin was absent).
 1. From `hermes-agent/`, run `./scripts/verify.sh`; it MUST print `seed-hermes scaffold verifies`.
 2. From `hermes-agent/`, run `./scripts/prepare.sh`; `.env` MUST contain `COMPOSE_PROJECT_NAME`, `HERMES_CONTAINER_NAME`, and the host user's `HERMES_UID` and `HERMES_GID`.
 3. From `hermes-agent/`, run `docker compose up -d` and then `./scripts/check-ready.sh`; the dashboard readiness probe or a Hermes gateway-ready log probe MUST pass. Parallel checkouts MUST also use distinct `HERMES_API_PORT` and `HERMES_DASHBOARD_PORT` values.
