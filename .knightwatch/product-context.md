@@ -14,4 +14,4 @@ Operating point (org default):
 - **Spec rigidity:** the SEED prose IS the contract; a handled edge case the
   spec never asked for is a cost, not a feature.
 
-**This repo's `ref/` payload:** (none) — spec only.
+**This repo's payload:** `hermes-agent/` — Docker compose files plus `scripts/` (`prepare.sh`, `verify.sh`, `hermes-exec.sh`, `yaml-get.sh`, etc.) and the optional `dtu/` mock; the single-operator reference realization of the prose lives here, not under `ref/`.

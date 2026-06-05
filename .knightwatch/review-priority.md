@@ -13,14 +13,15 @@ PR-relevant distillation; edit there first, re-distill here.
 collapse, inline) outrank additive ones at every severity. The prose spec is
 the contract; `ref/` is one realization of it. Apply the universal
 Broken-Glass posture from `standards.md` § Broken-Glass Test. The structural
-gate is falsifiable: `ref/verify.sh` must stay green (it implements the three
-SEED structural Verify prompts).
+gate is falsifiable: `hermes-agent/scripts/verify.sh` must stay green (it
+asserts the scaffold contract behind this repo's `## Verify` prompts and prints
+`seed-hermes scaffold verifies`).
 
 **Repo-specific contrast pairs (beyond the universal set in `standards.md`):**
 
 | SEED-convention DON'T (suppress / flag-as-shape) | SEED-convention DO (real finding) |
 |---|---|
-| Flag `ref/` code for missing abstractions, scale-hardening, extra flags, or defensive edge cases. `ref/` is a single-operator reference impl, not a product. | Flag a `ref/` change that breaks `ref/verify.sh` or makes a prose `## Verify` prompt no longer pass. |
+| Flag `hermes-agent/` code for missing abstractions, scale-hardening, extra flags, or defensive edge cases. It is a single-operator reference impl, not a product. | Flag a `hermes-agent/` change that breaks `hermes-agent/scripts/verify.sh` or makes a prose `## Verify` prompt no longer pass. |
 | Treat prose-only edits (Objects/Actions wording) as low-value churn. | Flag **prose↔ref drift**: `install.sh` diverging from `## Dependencies`, or `verify.sh` behavior diverging from the `## Verify` prompts — the canonical SEED regression. |
 | Suggest "approve all" / batched shell to speed an install script. | Flag any `ref/` install/verify shell that **batches or auto-approves** — violates `tier-2` per-block confirm (`^act-trust`). |
 | — | Flag any **literal secret** in `SEED.md`/`README.md`, or a probe that surfaces secret values (`env`/`printenv`, `cat` of credential files, `git remote -v`, `docker compose config`) — `^act-author-secrets` / `^act-author-probes`. Presence/name-only probes are the conforming form. |
