@@ -1,6 +1,6 @@
 # Purpose
 
-> See the [Purpose section of the README](README.md#purpose).
+> See [README#Purpose](README.md#purpose).
 
 ## Normative Language
 
@@ -10,7 +10,7 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 ### Host tools
 
-- Docker with Compose support MUST be available on the host.
+- Docker with Compose v2 support MUST be available on the host; if the Compose plugin is absent, the installer installs it.
 - A POSIX shell and `curl` MUST be available on the host.
 - A ChatGPT account capable of completing Hermes' `openai-codex` OAuth device-code flow MUST be available when model auth is performed.
 
@@ -116,7 +116,7 @@ The agent starts Hermes in Docker.
 - DTU MUST be reachable from the Hermes container at `http://dtu:8080` (compose-network DNS) so downstream seeds do not have to rely on `host.docker.internal` (which does not resolve inside Docker-in-Docker substrates).
 - The DTU build context lives at `hermes-agent/dtu/`. The shipped `app.py` implements the minimal hostex contract documented in `hermes-agent/dtu/README.md`; it MAY be replaced with a richer implementation provided the same endpoint surface is preserved.
 
-## Verify
+## Verification
 
 1. From `hermes-agent/`, run `./scripts/verify.sh`; it MUST print `seed-hermes scaffold verifies`.
 2. From `hermes-agent/`, run `./scripts/prepare.sh`; `.env` MUST contain `COMPOSE_PROJECT_NAME`, `HERMES_CONTAINER_NAME`, and the host user's `HERMES_UID` and `HERMES_GID`.
