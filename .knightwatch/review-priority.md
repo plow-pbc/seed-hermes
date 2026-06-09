@@ -22,7 +22,7 @@ asserts the scaffold contract behind this repo's `## Verify` prompts and prints
 | SEED-convention DON'T (suppress / flag-as-shape) | SEED-convention DO (real finding) |
 |---|---|
 | Flag `hermes-agent/` code for missing abstractions, scale-hardening, extra flags, or defensive edge cases. It is a single-operator reference impl, not a product. | Flag a `hermes-agent/` change that breaks `hermes-agent/scripts/verify.sh` or makes a prose `## Verify` prompt no longer pass. |
-| Treat prose-only edits (Objects/Actions wording) as low-value churn. | Flag **prose↔ref drift**: `install.sh` diverging from `## Dependencies`, or `verify.sh` behavior diverging from the `## Verify` prompts — the canonical SEED regression. |
+| Treat prose-only edits (Objects/Actions wording) as low-value churn. | Flag **prose↔ref drift**: `hermes-agent/scripts/prepare.sh` diverging from `## Actions`, or `hermes-agent/scripts/verify.sh` behavior diverging from the `## Verify` prompts — the canonical SEED regression. |
 | Suggest "approve all" / batched shell to speed an install script. | Flag any `hermes-agent/` install/verify shell that **batches or auto-approves** — violates `tier-2` per-block confirm (`^act-trust`). |
 | — | Flag any **literal secret** in `SEED.md`/`README.md`, or a probe that surfaces secret values (`env`/`printenv`, `cat` of credential files, `git remote -v`, `docker compose config`) — `^act-author-secrets` / `^act-author-probes`. Presence/name-only probes are the conforming form. |
 | — | Flag a clone URL (in spec text or `hermes-agent/` shell) carrying **userinfo / query / fragment** — `^act-install-clone-url` argv-leakage rule. |
