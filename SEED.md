@@ -72,7 +72,7 @@ The agent prepares the Docker-only Hermes workspace without requiring host-local
 
 1. Change into `hermes-agent/`.
 2. Run `./scripts/prepare.sh`.
-3. Confirm `data/config.yaml`, `data/workspace/`, `data/plugins/`, `data/profiles/`, `data/{cron,sessions,logs,hooks,memories,skills,skins,plans,home}/`, `.env`, and `data/.env` exist.
+3. Confirm `data/config.yaml`, `data/workspace/`, `data/plugins/`, `data/profiles/`, `.env`, and `data/.env` exist. (The `data/{cron,sessions,logs,hooks,memories,skills,skins,plans,home}/` runtime subdirs are NOT created here; the image's stage2-hook creates them under the remapped UID at first boot.)
 4. Confirm `.env` contains `HERMES_UID=$(id -u)` and `HERMES_GID=$(id -g)` (the host user's IDs) and does NOT contain `HERMES_HOST_UID` / `HERMES_HOST_GID`.
 5. Do not overwrite an existing `data/config.yaml`.
 
