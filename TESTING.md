@@ -162,21 +162,59 @@ host-edit
 
 ## ChatGPT OAuth
 
-The auth script invokes the required non-TTY command:
+`./scripts/auth-openai-codex.sh` first attempts non-interactive reuse of an
+existing `openai-codex` credential, then falls back to the device-code flow.
+
+### Reuse path (non-interactive)
+
+The script sources a credential from `${CODEX_HOME:-$HOME/.codex}/auth.json`
+(point `CODEX_HOME` elsewhere to reuse a credential staged in another
+directory), and adopts it into Hermes' own
+auth store via Hermes' native Codex-CLI import path
+(`hermes_cli.auth._recover_codex_tokens_from_cli`, which reads the file via
+`_import_codex_cli_tokens`), so `data/auth.json` is written in Hermes' own
+schema rather than a raw copy. The credential is adopted only if it is
+parseable JSON with `auth_mode == "chatgpt"` and a non-empty
+`tokens.refresh_token`, and the reader additionally rejects a missing or
+expired-and-unrefreshable access token; anything else falls through to the
+device-code flow.
+
+```sh
+CODEX_HOME=<dir-containing-codex-cli-auth.json> ./scripts/auth-openai-codex.sh
+docker compose run --rm -T hermes auth status openai-codex
+```
+
+Observed (no device URL printed, no interaction, exit 0; no token value echoed):
+
+```text
+Reused an existing ChatGPT openai-codex credential; Hermes reports it logged in.
+openai-codex: logged in
+```
+
+The resulting `data/auth.json` has Hermes' auth-store shape (keys only):
+
+```text
+top: ['active_provider', 'credential_pool', 'providers', 'updated_at', 'version']
+providers.openai-codex: ['auth_mode', 'last_refresh', 'tokens']  # auth_mode == 'chatgpt'
+```
+
+Re-running with an already-valid store is an idempotent no-op success
+(`hermes auth status openai-codex` reports `logged in`, so the script exits 0
+without re-adopting).
+
+### Fallback path (device-code)
+
+When no valid credential is found (`~/.codex/auth.json` absent or invalid and
+`CODEX_HOME` unset), the script invokes the required non-TTY command:
 
 ```sh
 docker compose run --rm -T hermes auth add openai-codex
 ```
 
-I ran `./scripts/auth-openai-codex.sh` under a harness that terminated after the parser captured both required fields, without printing the short-lived code value into this file:
-
-```text
-captured device URL
-captured device code format
-oauth_capture url=True code=True completed=False
-```
-
-Browser approval and the first authenticated Hermes agent turn were not completed in this cook run because they require the user to approve the device flow in a browser. The script is ready to continue to completion when run interactively by the installing agent/user.
+The parser relays `https://auth.openai.com/codex/device` and the short-lived
+code (not captured into this file). Browser approval and the first
+authenticated Hermes turn require the user to approve the device flow in a
+browser, so they complete when run interactively by the installing agent/user.
 
 ## Secret hygiene
 
