@@ -54,7 +54,11 @@ grep -q '\${HERMES_DASHBOARD_PORT:-9119}:9119' compose.yaml || fail "dashboard p
 grep -q 'HERMES_DASHBOARD: "1"' compose.yaml || fail "dashboard is not enabled by default"
 grep -q 'cwd: /opt/data/workspace' data/config.yaml || fail "terminal.cwd is not /opt/data/workspace"
 grep -q 'provider: openai-codex' data/config.yaml || fail "model.provider is not openai-codex"
-if grep -q 'base_url:' data/config.yaml; then
+if awk '
+  /^[^[:space:]#]/ { in_model = ($0 ~ /^model:/) }
+  in_model && /^[[:space:]]+base_url:/ { found = 1 }
+  END { exit(found ? 0 : 1) }
+' data/config.yaml; then
   fail "data/config.yaml must not set model.base_url for openai-codex"
 fi
 
