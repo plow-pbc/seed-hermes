@@ -46,6 +46,13 @@ services:
       HERMES_UID: ${HERMES_UID:?Run ./scripts/prepare.sh before docker compose up}
       HERMES_GID: ${HERMES_GID:?Run ./scripts/prepare.sh before docker compose up}
       HERMES_DASHBOARD: "1"
+      # The image's dashboard run script binds to 0.0.0.0 (required so Docker
+      # can port-map 9119 to the host). On a non-loopback bind its OAuth auth
+      # gate fails closed unless a DashboardAuthProvider is registered — so
+      # `--insecure` is opt-in via HERMES_DASHBOARD_INSECURE. Without it the
+      # dashboard never opens a socket and s6 crash-loops the service. This
+      # seed runs a disposable, loopback-browsed container, so we opt in.
+      HERMES_DASHBOARD_INSECURE: "1"
       HERMES_YOLO_MODE: "1"
       GATEWAY_ALLOW_ALL_USERS: "true"
     env_file:
