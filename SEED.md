@@ -12,7 +12,8 @@ The key words MUST, MUST NOT, REQUIRED, SHALL, SHALL NOT, SHOULD, SHOULD NOT, RE
 
 - Docker with Compose v2 support MUST be available on the host; if the Compose plugin is absent, the installer installs it.
 - A POSIX shell and `curl` MUST be available on the host.
-- A ChatGPT account capable of completing Hermes' `openai-codex` OAuth device-code flow MUST be available when model auth is performed.
+- A ChatGPT account capable of completing Hermes' `openai-codex` OAuth device-code flow MUST be available when model auth is performed, UNLESS a valid `openai-codex` credential already exists for reuse (see below).
+- An existing ChatGPT `openai-codex` credential MAY be reused instead of running the device-code flow. The credential is sourced, highest precedence first, from `HERMES_OPENAI_CODEX_AUTH_FILE` (an OPTIONAL explicit path) else `${CODEX_HOME:-$HOME/.codex}/auth.json` (the OpenAI Codex CLI's own store). When a valid credential is found it is adopted non-interactively; otherwise the device-code flow runs.
 
 ### Optional platform gateway
 
@@ -88,15 +89,13 @@ The agent asks the user whether they want a platform gateway.
 
 ### ChatGPT OAuth is completed
 
-The agent drives Hermes' `openai-codex` OAuth device-code flow headlessly.
+The agent completes Hermes' `openai-codex` auth — reusing an existing credential when one is present, otherwise driving the device-code flow headlessly.
 
-1. Run `./scripts/auth-openai-codex.sh`, which invokes `docker compose run --rm -T hermes auth add openai-codex`.
-2. Relay `https://auth.openai.com/codex/device` to the user.
-3. Relay the code printed on the line after `2. Enter this code:`.
-4. Wait for the user to complete browser approval.
-5. Confirm Hermes prints `Added openai-codex OAuth credential #<N>` and writes `data/auth.json`.
-6. Do not build provider introspection, `.env` BYOK branching, or automation around `hermes model`.
-7. Advanced users who want a different provider MAY run `docker compose run --rm hermes model` themselves in a terminal.
+1. Run `./scripts/auth-openai-codex.sh`. It first attempts non-interactive reuse, then falls back to the device-code flow.
+2. **Reuse path.** If Hermes already reports `openai-codex` logged in, the script is a no-op success. Otherwise, if a valid credential exists at `HERMES_OPENAI_CODEX_AUTH_FILE` (if set) or `${CODEX_HOME:-$HOME/.codex}/auth.json`, the script adopts it into Hermes' own auth store via Hermes' native Codex-CLI import path and confirms `hermes auth status openai-codex` reports logged in. A credential is "valid" only if it is parseable JSON with `auth_mode` equal to `chatgpt` and a non-empty `tokens.refresh_token`; the device flow MUST NOT print any `https://auth.openai.com/codex/device` URL on this path. No token value is echoed.
+3. **Fallback (device-code) path.** When no valid credential is found, the script invokes `docker compose run --rm -T hermes auth add openai-codex`. Relay `https://auth.openai.com/codex/device` to the user, relay the code printed on the line after `2. Enter this code:`, wait for browser approval, and confirm Hermes prints `Added openai-codex OAuth credential #<N>` and writes `data/auth.json`.
+4. Do not build provider introspection, `.env` BYOK branching, or automation around `hermes model`.
+5. Advanced users who want a different provider MAY run `docker compose run --rm hermes model` themselves in a terminal.
 
 ### Hermes is started
 
