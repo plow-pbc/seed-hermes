@@ -118,8 +118,8 @@ The agent starts Hermes in Docker.
 
 ## Verification
 
-1. From `hermes-agent/`, run `./scripts/verify.sh`; it MUST print `seed-hermes scaffold verifies`.
-2. From `hermes-agent/`, run `./scripts/prepare.sh`; `.env` MUST contain `COMPOSE_PROJECT_NAME`, `HERMES_CONTAINER_NAME`, and the host user's `HERMES_UID` and `HERMES_GID`.
+1. From `hermes-agent/`, run `./scripts/prepare.sh`; `.env` MUST contain `COMPOSE_PROJECT_NAME`, `HERMES_CONTAINER_NAME`, and the host user's `HERMES_UID` and `HERMES_GID`.
+2. From `hermes-agent/`, run `./scripts/verify.sh`; it MUST print `seed-hermes scaffold verifies`.
 3. From `hermes-agent/`, run `docker compose up -d` and then `./scripts/check-ready.sh`; the dashboard readiness probe or a Hermes gateway-ready log probe MUST pass. Parallel checkouts MUST also use distinct `HERMES_API_PORT` and `HERMES_DASHBOARD_PORT` values.
 4. From `hermes-agent/`, fetch `http://localhost:${HERMES_DASHBOARD_PORT:-9119}/`; it MUST return dashboard HTML.
 5. From `hermes-agent/`, write a smoke file from inside the running container to `/opt/data/workspace/`; the same file MUST appear in `data/workspace/` and the host user MUST be able to edit it.
