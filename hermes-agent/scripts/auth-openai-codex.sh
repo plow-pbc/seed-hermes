@@ -35,8 +35,9 @@ hermes_run() { docker compose run --rm -T "$@"; }
 
 reuse_existing_credential() {
   # Idempotent: a Hermes auth store that already accepts openai-codex is a
-  # no-op success, regardless of where it came from.
-  if hermes_run hermes auth status openai-codex 2>/dev/null | grep -q 'logged in'; then
+  # no-op success, regardless of where it came from. Anchor on ": logged in"
+  # so the negative status (": not logged in" / ": logged out") can't match.
+  if hermes_run hermes auth status openai-codex 2>/dev/null | grep -q ': logged in'; then
     echo "ChatGPT OAuth already present; Hermes reports openai-codex logged in."
     return 0
   fi
@@ -44,17 +45,19 @@ reuse_existing_credential() {
   [ -f "$codex_auth_file" ] || return 1
 
   # Mount the candidate read-only and point Hermes' CLI-token reader at it via
-  # CODEX_HOME. _import_codex_cli_tokens validates the file (parseable JSON,
-  # non-empty access/refresh, not expired); we add the conservative
-  # auth_mode=="chatgpt" guard before adopting. On success Hermes writes its
-  # own auth-store schema and `auth status` reports logged in.
+  # CODEX_HOME. _recover_codex_tokens_from_cli reads ${CODEX_HOME}/auth.json
+  # through _import_codex_cli_tokens (which enforces parseable JSON + non-empty
+  # access/refresh + not-expired), then writes the Hermes auth store; it returns
+  # falsy when the credential is absent/invalid. We add the conservative
+  # auth_mode=="chatgpt" guard before adopting. On success Hermes writes its own
+  # auth-store schema and `auth status` reports logged in.
   if ! hermes_run \
         -v "$codex_auth_file":/run/seed-codex/auth.json:ro \
         -e CODEX_HOME=/run/seed-codex \
         hermes /opt/hermes/.venv/bin/python - <<'PY'
 import json, os, sys
 from pathlib import Path
-from hermes_cli.auth import _import_codex_cli_tokens, _recover_codex_tokens_from_cli
+from hermes_cli.auth import _recover_codex_tokens_from_cli
 
 auth_path = Path(os.environ["CODEX_HOME"]) / "auth.json"
 try:
@@ -64,17 +67,13 @@ except Exception:
 if auth_mode != "chatgpt":
     sys.exit(1)
 
-# _import_codex_cli_tokens enforces parseable JSON + non-empty access/refresh
-# + not-expired; _recover_codex_tokens_from_cli writes the Hermes auth store.
-if not _import_codex_cli_tokens():
-    sys.exit(1)
 sys.exit(0 if _recover_codex_tokens_from_cli("seed-hermes reuse of existing openai-codex credential") else 1)
 PY
   then
     return 1
   fi
 
-  if ! hermes_run hermes auth status openai-codex 2>/dev/null | grep -q 'logged in'; then
+  if ! hermes_run hermes auth status openai-codex 2>/dev/null | grep -q ': logged in'; then
     echo "Adopted an existing credential but Hermes did not report openai-codex logged in." >&2
     return 1
   fi

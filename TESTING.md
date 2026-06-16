@@ -170,8 +170,13 @@ existing `openai-codex` credential, then falls back to the device-code flow.
 The script sources a credential from `HERMES_OPENAI_CODEX_AUTH_FILE` (if set)
 else `${CODEX_HOME:-$HOME/.codex}/auth.json`, and adopts it into Hermes' own
 auth store via Hermes' native Codex-CLI import path
-(`hermes_cli.auth._import_codex_cli_tokens` / `_recover_codex_tokens_from_cli`),
-so `data/auth.json` is written in Hermes' own schema rather than a raw copy.
+(`hermes_cli.auth._recover_codex_tokens_from_cli`, which reads the file via
+`_import_codex_cli_tokens`), so `data/auth.json` is written in Hermes' own
+schema rather than a raw copy. The credential is adopted only if it is
+parseable JSON with `auth_mode == "chatgpt"` and a non-empty
+`tokens.refresh_token`, and the reader additionally rejects a missing or
+expired-and-unrefreshable access token; anything else falls through to the
+device-code flow.
 
 ```sh
 HERMES_OPENAI_CODEX_AUTH_FILE=<path-to-codex-cli-auth.json> ./scripts/auth-openai-codex.sh
