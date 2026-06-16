@@ -23,10 +23,9 @@ cd -- "$(dirname "$0")/.."
 # container-side reader additionally rejects an expired access token that
 # cannot be refreshed. No token value is ever echoed.
 
-# Candidate credential file, in precedence order:
-#   1. HERMES_OPENAI_CODEX_AUTH_FILE (explicit bypass)
-#   2. ${CODEX_HOME:-$HOME/.codex}/auth.json (the Codex CLI's own store)
-codex_auth_file="${HERMES_OPENAI_CODEX_AUTH_FILE:-${CODEX_HOME:-$HOME/.codex}/auth.json}"
+# Candidate credential file: the Codex CLI's own store. Point CODEX_HOME at a
+# different directory to reuse a credential staged elsewhere.
+codex_auth_file="${CODEX_HOME:-$HOME/.codex}/auth.json"
 
 # Run a command through the image's normal s6 entrypoint (no --entrypoint
 # override) so it drops privileges to the HERMES_UID/HERMES_GID-remapped
@@ -94,7 +93,7 @@ trap 'rm -f "$tmp"' EXIT
 echo "Starting Hermes ChatGPT OAuth. Complete the browser approval when the device page opens."
 
 set +e
-docker compose run --rm -T hermes auth add openai-codex 2>&1 | tee "$tmp" | awk '
+hermes_run hermes auth add openai-codex 2>&1 | tee "$tmp" | awk '
 function strip_ansi(s) {
   gsub(/\033\[[0-9;?]*[ -\/]*[@-~]/, "", s)
   return s

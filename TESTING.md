@@ -167,8 +167,9 @@ existing `openai-codex` credential, then falls back to the device-code flow.
 
 ### Reuse path (non-interactive)
 
-The script sources a credential from `HERMES_OPENAI_CODEX_AUTH_FILE` (if set)
-else `${CODEX_HOME:-$HOME/.codex}/auth.json`, and adopts it into Hermes' own
+The script sources a credential from `${CODEX_HOME:-$HOME/.codex}/auth.json`
+(point `CODEX_HOME` elsewhere to reuse a credential staged in another
+directory), and adopts it into Hermes' own
 auth store via Hermes' native Codex-CLI import path
 (`hermes_cli.auth._recover_codex_tokens_from_cli`, which reads the file via
 `_import_codex_cli_tokens`), so `data/auth.json` is written in Hermes' own
@@ -179,7 +180,7 @@ expired-and-unrefreshable access token; anything else falls through to the
 device-code flow.
 
 ```sh
-HERMES_OPENAI_CODEX_AUTH_FILE=<path-to-codex-cli-auth.json> ./scripts/auth-openai-codex.sh
+CODEX_HOME=<dir-containing-codex-cli-auth.json> ./scripts/auth-openai-codex.sh
 docker compose run --rm -T hermes auth status openai-codex
 ```
 
@@ -203,8 +204,8 @@ without re-adopting).
 
 ### Fallback path (device-code)
 
-When no valid credential is found (env var unset and `~/.codex/auth.json`
-absent or invalid), the script invokes the required non-TTY command:
+When no valid credential is found (`~/.codex/auth.json` absent or invalid and
+`CODEX_HOME` unset), the script invokes the required non-TTY command:
 
 ```sh
 docker compose run --rm -T hermes auth add openai-codex
