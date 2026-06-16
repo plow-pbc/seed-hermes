@@ -68,7 +68,7 @@ The old `data/bin/entrypoint.d/*.sh` directory has been retired (it was our entr
 
 The seed is intentionally generic: platform-specific behavior lives in optional gateway seeds. This repo ships no gateway install scripts; gateway seeds own their own plugin files, host orchestration, and verification.
 
-The Hermes dashboard is enabled by default at `http://localhost:9119`. It shows the local Hermes web UI for sessions, logs, configuration, plugins, and dashboard-backed tools. Inside Docker, the entrypoint binds it to `0.0.0.0` and passes the dashboard's `--insecure` flag; this is acceptable for the disposable local container because the published port is intended for loopback browsing. Do not expose `9119` beyond the trusted local machine.
+The Hermes dashboard is enabled by default at `http://localhost:9119`. It shows the local Hermes web UI for sessions, logs, configuration, plugins, and dashboard-backed tools. The dashboard is **unauthenticated**: inside the container it binds `0.0.0.0`, where Hermes' OAuth auth gate fails closed unless `--insecure` is opted in — so `compose.yaml` sets `HERMES_DASHBOARD_INSECURE=1`. To keep that unauthenticated UI off the network, the host port is published to **loopback only** (`127.0.0.1:9119`), reachable just from the machine itself. Do not republish `9119` beyond loopback.
 
 The Docker compose defaults keep Hermes autonomous inside the disposable container: `HERMES_YOLO_MODE=1` lets the agent act without interactive approval prompts, and `GATEWAY_ALLOW_ALL_USERS=true` lets the gateway accept inbound platform users. Platform-specific seeds are responsible for their own access gates.
 

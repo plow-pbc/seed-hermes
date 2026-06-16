@@ -32,7 +32,9 @@ services:
       - ./cont-init.d/50-install-jq.sh:/etc/cont-init.d/50-install-jq.sh:ro
     ports:
       - "${HERMES_API_PORT:-8642}:8642"
-      - "${HERMES_DASHBOARD_PORT:-9119}:9119"
+      # Published to host loopback ONLY: the dashboard is unauthenticated
+      # (HERMES_DASHBOARD_INSECURE below), so it must not be reachable off-host.
+      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
     # Run the gateway, not the interactive REPL. Without this, the image's
     # main-wrapper.sh falls back to `hermes` (interactive) which exits at
     # boot in `docker compose up -d` with "Input is not a terminal (fd=0)".

@@ -50,8 +50,9 @@ grep -q './data:/opt/data' compose.yaml || fail "whole data volume is not mounte
 grep -q 'HERMES_UID:' compose.yaml || fail "HERMES_UID env var missing from compose"
 grep -q 'HERMES_GID:' compose.yaml || fail "HERMES_GID env var missing from compose"
 grep -q '\${HERMES_API_PORT:-8642}:8642' compose.yaml || fail "API port is not overridable"
-grep -q '\${HERMES_DASHBOARD_PORT:-9119}:9119' compose.yaml || fail "dashboard port is not overridable"
+grep -q '127\.0\.0\.1:\${HERMES_DASHBOARD_PORT:-9119}:9119' compose.yaml || fail "dashboard port must be loopback-published (127.0.0.1) and overridable — the dashboard is unauthenticated"
 grep -q 'HERMES_DASHBOARD: "1"' compose.yaml || fail "dashboard is not enabled by default"
+grep -q 'HERMES_DASHBOARD_INSECURE: "1"' compose.yaml || fail "HERMES_DASHBOARD_INSECURE is not set — the dashboard binds 0.0.0.0 inside the container, so without the insecure opt-in its auth gate fails closed and the service crash-loops"
 grep -q 'cwd: /opt/data/workspace' data/config.yaml || fail "terminal.cwd is not /opt/data/workspace"
 grep -q 'provider: openai-codex' data/config.yaml || fail "model.provider is not openai-codex"
 if awk '
@@ -84,11 +85,12 @@ git check-ignore -q hermes-agent/data/auth.json || fail "hermes-agent/data/auth.
 if git ls-files | grep -Eq '(^|/)auth\.json$|(^|/)data/\.env$|(^|/)hermes-agent/\.env$'; then
   fail "runtime secret files are tracked"
 fi
-if git grep -nE 'g[h]p_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' >/tmp/seed-hermes-secret-grep.$$ 2>/dev/null; then
-  cat /tmp/seed-hermes-secret-grep.$$
-  rm -f /tmp/seed-hermes-secret-grep.$$
+# Path-only (`-l`): never print the matched lines — a verifier that guards against
+# committed secrets must not copy the matched literal into logs/reports.
+secret_files="$(git grep -lE 'g[h]p_[A-Za-z0-9_]+|sk-[A-Za-z0-9_-]{12,}|OPENAI_API_KEY=.+|secret_key[[:space:]]*:[[:space:]]*[^<[:space:]]' -- . ':!TESTING.md' ':!hermes-agent/scripts/verify.sh' 2>/dev/null || true)"
+if [ -n "$secret_files" ]; then
+  printf 'tracked files with secret-looking literals:\n%s\n' "$secret_files" >&2
   fail "tracked files contain secret-looking literal values"
 fi
-rm -f /tmp/seed-hermes-secret-grep.$$
 
 echo "seed-hermes scaffold verifies"
