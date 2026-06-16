@@ -15,6 +15,9 @@ hermes-agent/data/workspace/*
 !hermes-agent/data/plugins/
 hermes-agent/data/plugins/*
 !hermes-agent/data/plugins/.gitkeep
+!hermes-agent/data/profiles/
+hermes-agent/data/profiles/*
+!hermes-agent/data/profiles/.gitkeep
 
 # Local smoke-test artifacts.
 hermes-agent/data/workspace/hermes-write-smoke.txt
