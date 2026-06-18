@@ -1,24 +1,113 @@
 #!/usr/bin/env bash
+#
+# check-ready.sh — bounded readiness wait for the Hermes container.
+#
+# Probes three readiness signals (dashboard HTTP, gateway.log line, docker
+# compose logs line) and returns on the first one that succeeds. The probes are
+# wrapped in a bounded polling loop so callers inherit a first-boot-aware wait
+# instead of hand-rolling their own poll: a fresh Pi's first boot runs a
+# one-time recursive chown during the s6 stage2 hook that can take ~6 min on
+# slow storage, during which none of the signals are up yet.
+#
+# Usage:
+#     ./scripts/check-ready.sh [--timeout <seconds>]
+#
+#     --timeout <seconds>   Max seconds to wait for readiness (default 600).
+#                           Also settable via HERMES_READY_TIMEOUT.
+#
+# Exits 0 on the first successful probe (printing the matching success line),
+# or 1 if no signal appears before the timeout elapses.
+
 set -euo pipefail
+
+timeout="${HERMES_READY_TIMEOUT:-600}"
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --timeout)
+      [ "$#" -ge 2 ] || { echo "check-ready: --timeout requires a value" >&2; exit 2; }
+      timeout="$2"
+      shift 2
+      ;;
+    --timeout=*)
+      timeout="${1#*=}"
+      shift
+      ;;
+    -h|--help)
+      cat >&2 <<'USAGE'
+Usage: check-ready.sh [--timeout <seconds>]
+
+  --timeout <seconds>   Max seconds to wait for Hermes readiness (default 600).
+                        Also settable via the HERMES_READY_TIMEOUT env var.
+
+Polls the dashboard HTTP, gateway.log, and docker-compose-logs readiness
+signals until one succeeds (exit 0) or the timeout elapses (exit 1).
+USAGE
+      exit 0
+      ;;
+    *)
+      echo "check-ready: unknown argument: $1" >&2
+      exit 2
+      ;;
+  esac
+done
+
+case "$timeout" in '' | *[!0-9]*) echo "check-ready: timeout must be a non-negative integer (got '$timeout')" >&2; exit 2 ;; esac
 
 cd -- "$(dirname "$0")/.."
 dashboard_port="$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' .env 2>/dev/null | tail -n 1)"
 dashboard_port="${dashboard_port:-9119}"
 
-if curl -fsS --max-time 3 "http://localhost:${dashboard_port}/" >/dev/null 2>&1; then
-  echo "Hermes dashboard is reachable on http://localhost:${dashboard_port}/"
-  exit 0
-fi
+probe_ready() {  # $1 = max seconds the dashboard HTTP probe may block
+  if curl -fsS --max-time "$1" "http://localhost:${dashboard_port}/" >/dev/null 2>&1; then
+    echo "Hermes dashboard is reachable on http://localhost:${dashboard_port}/"
+    return 0
+  fi
 
-if grep -Eq 'Gateway running with [0-9]+ platform|Gateway will continue running' data/logs/gateway.log 2>/dev/null; then
-  echo "Hermes gateway readiness confirmed from data/logs/gateway.log."
-  exit 0
-fi
+  if grep -Eq 'Gateway running with [0-9]+ platform|Gateway will continue running' data/logs/gateway.log 2>/dev/null; then
+    echo "Hermes gateway readiness confirmed from data/logs/gateway.log."
+    return 0
+  fi
 
-if docker compose logs --no-color --tail=300 hermes 2>/dev/null | grep -Eq 'Gateway running with [0-9]+ platform|Gateway will continue running'; then
-  echo "Hermes gateway readiness confirmed from docker compose logs."
-  exit 0
-fi
+  if docker compose logs --no-color --tail=300 hermes 2>/dev/null | grep -Eq 'Gateway running with [0-9]+ platform|Gateway will continue running'; then
+    echo "Hermes gateway readiness confirmed from docker compose logs."
+    return 0
+  fi
 
-echo "Hermes readiness probe failed: dashboard did not answer and no gateway-ready log line was found." >&2
+  return 1
+}
+
+start="$(date +%s)"
+deadline=$(( start + timeout ))
+next_progress=$(( start + 60 ))
+
+while :; do
+  now="$(date +%s)"
+  remaining=$(( deadline - now ))
+
+  # Make --timeout a hard cap: cap the dashboard curl at the time left (floor 1
+  # so --timeout 0 still does a single probe) so a hung dashboard can't block
+  # past the deadline. The log greps are effectively instant.
+  curl_max=$(( remaining < 3 ? remaining : 3 ))
+  [ "$curl_max" -lt 1 ] && curl_max=1
+  if probe_ready "$curl_max"; then
+    exit 0
+  fi
+
+  # Re-measure after the probe (it may have consumed up to curl_max seconds), so
+  # the deadline + sleep decisions read fresh time, not the stale pre-probe value.
+  now="$(date +%s)"
+  [ "$now" -ge "$deadline" ] && break
+
+  if [ "$now" -ge "$next_progress" ]; then
+    echo "still waiting for Hermes readiness… ($(( now - start ))s/${timeout}s elapsed)" >&2
+    next_progress=$(( now + 60 ))
+  fi
+
+  # Cap the poll sleep at the remaining budget too (now < deadline here, so > 0).
+  remaining=$(( deadline - now ))
+  sleep "$(( remaining < 10 ? remaining : 10 ))"
+done
+
+echo "Hermes readiness probe failed after ${timeout}s: dashboard did not answer and no gateway-ready log line was found." >&2
 exit 1
