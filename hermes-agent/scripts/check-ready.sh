@@ -53,6 +53,9 @@ USAGE
   esac
 done
 
+case "$timeout" in '' | *[!0-9]*) echo "check-ready: timeout must be a non-negative integer (got '$timeout')" >&2; exit 2 ;; esac
+case "$interval" in '' | *[!0-9]* | 0) echo "check-ready: interval must be a positive integer (got '$interval')" >&2; exit 2 ;; esac
+
 cd -- "$(dirname "$0")/.."
 dashboard_port="$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' .env 2>/dev/null | tail -n 1)"
 dashboard_port="${dashboard_port:-9119}"
