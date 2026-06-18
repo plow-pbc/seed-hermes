@@ -58,8 +58,8 @@ cd -- "$(dirname "$0")/.."
 dashboard_port="$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' .env 2>/dev/null | tail -n 1)"
 dashboard_port="${dashboard_port:-9119}"
 
-probe_ready() {
-  if curl -fsS --max-time 3 "http://localhost:${dashboard_port}/" >/dev/null 2>&1; then
+probe_ready() {  # $1 = max seconds the dashboard HTTP probe may block
+  if curl -fsS --max-time "$1" "http://localhost:${dashboard_port}/" >/dev/null 2>&1; then
     echo "Hermes dashboard is reachable on http://localhost:${dashboard_port}/"
     return 0
   fi
@@ -78,27 +78,34 @@ probe_ready() {
 }
 
 start="$(date +%s)"
+deadline=$(( start + timeout ))
 next_progress=$(( start + 60 ))
 
 while :; do
-  if probe_ready; then
+  now="$(date +%s)"
+  remaining=$(( deadline - now ))
+
+  # Make --timeout a hard cap: cap the dashboard curl at the time left (floor 1
+  # so --timeout 0 still does a single probe) so a hung dashboard can't block
+  # past the deadline. The log greps are effectively instant.
+  curl_max=$(( remaining < 3 ? remaining : 3 ))
+  [ "$curl_max" -lt 1 ] && curl_max=1
+  if probe_ready "$curl_max"; then
     exit 0
   fi
 
+  # Re-measure after the probe (it may have consumed up to curl_max seconds), so
+  # the deadline + sleep decisions read fresh time, not the stale pre-probe value.
   now="$(date +%s)"
-  elapsed=$(( now - start ))
-  if [ "$elapsed" -ge "$timeout" ]; then
-    break
-  fi
+  [ "$now" -ge "$deadline" ] && break
 
   if [ "$now" -ge "$next_progress" ]; then
-    echo "still waiting for Hermes readiness… (${elapsed}s/${timeout}s elapsed)" >&2
+    echo "still waiting for Hermes readiness… ($(( now - start ))s/${timeout}s elapsed)" >&2
     next_progress=$(( now + 60 ))
   fi
 
-  # Poll every 10s, but never overshoot the deadline: cap the final sleep at the
-  # remaining budget so --timeout is honored to the second (elapsed < timeout here).
-  remaining=$(( timeout - elapsed ))
+  # Cap the poll sleep at the remaining budget too (now < deadline here, so > 0).
+  remaining=$(( deadline - now ))
   sleep "$(( remaining < 10 ? remaining : 10 ))"
 done
 
