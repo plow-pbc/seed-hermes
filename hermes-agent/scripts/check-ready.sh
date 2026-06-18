@@ -21,7 +21,6 @@
 set -euo pipefail
 
 timeout="${HERMES_READY_TIMEOUT:-600}"
-interval="${HERMES_READY_INTERVAL:-10}"
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -54,7 +53,6 @@ USAGE
 done
 
 case "$timeout" in '' | *[!0-9]*) echo "check-ready: timeout must be a non-negative integer (got '$timeout')" >&2; exit 2 ;; esac
-case "$interval" in '' | *[!0-9]* | 0) echo "check-ready: interval must be a positive integer (got '$interval')" >&2; exit 2 ;; esac
 
 cd -- "$(dirname "$0")/.."
 dashboard_port="$(sed -n 's/^HERMES_DASHBOARD_PORT=//p' .env 2>/dev/null | tail -n 1)"
@@ -98,7 +96,10 @@ while :; do
     next_progress=$(( now + 60 ))
   fi
 
-  sleep "$interval"
+  # Poll every 10s, but never overshoot the deadline: cap the final sleep at the
+  # remaining budget so --timeout is honored to the second (elapsed < timeout here).
+  remaining=$(( timeout - elapsed ))
+  sleep "$(( remaining < 10 ? remaining : 10 ))"
 done
 
 echo "Hermes readiness probe failed after ${timeout}s: dashboard did not answer and no gateway-ready log line was found." >&2
