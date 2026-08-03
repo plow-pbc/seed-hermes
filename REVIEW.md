@@ -9,8 +9,8 @@ themselves and is deliberately not restated here.
 Pre-PMF, fewer than 10 users, often a single operator. Iteration speed beats
 hardening for scale: prefer loud failures to fallbacks, pragmatic DRY
 architecture to defensive layering, and don't guard edge cases that can't
-trigger at this scale. Specs are sketches, not contracts — a handled case the
-intent never asked for is a cost.
+trigger at this scale. The SEED prose IS the contract; a handled edge case the
+spec never asked for is a cost, not a feature.
 
 ## Review priority
 
