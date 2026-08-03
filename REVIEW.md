@@ -1,8 +1,16 @@
 # Review instructions — seed-hermes
 
-Repo-specific reviewer policy. The universal posture (Broken-Glass,
-pro-simplification) and the org operating point are supplied by the reviewers
-themselves and are deliberately not restated here.
+Repo-specific reviewer policy. The universal voice posture (Broken-Glass,
+pro-simplification, and the don't-propose list) is supplied by the reviewers
+themselves and is deliberately not restated here.
+
+## Operating point
+
+Pre-PMF, fewer than 10 users, often a single operator. Iteration speed beats
+hardening for scale: prefer loud failures to fallbacks, pragmatic DRY
+architecture to defensive layering, and don't guard edge cases that can't
+trigger at this scale. Specs are sketches, not contracts — a handled case the
+intent never asked for is a cost.
 
 ## Review priority
 
